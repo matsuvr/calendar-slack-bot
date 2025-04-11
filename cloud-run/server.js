@@ -47,7 +47,7 @@ if (DEMO_MODE) {
   // 本番モードではSlack Boltと統合したExpressを使用
   try {
     expressReceiver = new ExpressReceiver({
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      signingSecret: process.env.SLACK_SIGNING_SECRET || 'dummy-secret-for-startup',
       processBeforeResponse: true,
     });
     expressApp = expressReceiver.app;
@@ -59,8 +59,35 @@ if (DEMO_MODE) {
   }
 }
 
+// デモモードではリクエストボディのパース用ミドルウェアを追加
+if (DEMO_MODE) {
+  expressApp.use(express.json());
+  expressApp.use(express.urlencoded({ extended: true }));
+  console.log('デモモード: JSONとフォームデータのパース用ミドルウェアを追加しました');
+}
+
 // 基本的なエンドポイントの設定
 expressApp.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
+// Slackのチャレンジリクエストに対応するエンドポイント
+expressApp.post('/slack/events', (req, res) => {
+  console.log('Slackからのリクエスト受信:', req.body);
+  
+  // チャレンジパラメータがある場合はその値をそのまま返す
+  if (req.body && req.body.challenge) {
+    console.log('Slackチャレンジリクエストに応答:', req.body.challenge);
+    return res.status(200).json({ challenge: req.body.challenge });
+  }
+  
+  // デモモードの場合は常に成功を返す（実際の処理は行わない）
+  if (DEMO_MODE) {
+    console.log('デモモード: イベントリクエストを受信しましたが処理はスキップします');
+    return res.status(200).send('OK');
+  }
+  
+  // 本番モードでは通常の処理を続行（expressReceiverが処理）
   res.status(200).send('OK');
 });
 
