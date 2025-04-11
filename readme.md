@@ -12,7 +12,7 @@ Slackの投稿に「カレンダーに入れる」スタンプ（:calendar:）�
 
 ## 必要条件
 
-- Node.js 16以上
+- Node.js 20以上
 - Slack APIアカウントとボットトークン
 - Google Gemini APIキー
 
@@ -59,7 +59,7 @@ PORT=3000
 
 以下のスタンプをワークスペースに追加します：
 
-- `:calendar:` - カレンダーに追加する予定を示すスタンプ
+- `:calendar-bot:` - カレンダーに追加する予定を示すスタンプ
 - `:no_event:` - 予定が見つからなかったことを示すスタンプ
 
 ### 6. アプリの起動
@@ -114,12 +114,51 @@ npm install -g serverless
 serverless deploy
 ```
 
+### Google Cloud Runへのデプロイ
+
+1. Google Cloud SDKをインストールします。
+
+```bash
+# Google Cloud SDKのインストール手順はOSによって異なります
+# https://cloud.google.com/sdk/docs/install
+```
+
+2. Google Cloudにログインします。
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+3. Dockerイメージをビルドし、Google Container Registryにプッシュします。
+
+```bash
+# リポジトリのcloud-runフォルダに移動
+cd cloud-run
+
+# イメージをビルド
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/calendar-slack-bot
+```
+
+4. Cloud Runサービスをデプロイします。
+
+```bash
+gcloud run deploy calendar-slack-bot \
+  --image gcr.io/YOUR_PROJECT_ID/calendar-slack-bot \
+  --platform managed \
+  --region asia-northeast1 \
+  --allow-unauthenticated \
+  --set-env-vars="SLACK_BOT_TOKEN=xoxb-your-bot-token,SLACK_SIGNING_SECRET=your-signing-secret,SLACK_APP_TOKEN=xapp-your-app-token,GEMINI_API_KEY=your-gemini-api-key"
+```
+
+5. デプロイが完了すると、サービスのURLが表示されます。このURLをSlackアプリの設定で使用します。
+
 ## 使用方法
 
 1. ボットをSlackチャンネルに招待します。
 2. 予定情報を含むメッセージを投稿します。例：
    「明日14時から16時まで会議室Aでプロジェクトミーティングを行います。」
-3. そのメッセージに`:calendar:`スタンプを付けます。
+3. そのメッセージに`:calendar-bot:`スタンプを付けます。
 4. ボットが予定を解析し、GoogleカレンダーURLをスレッドで返信します。
 5. URLをクリックしてGoogleカレンダーに予定を追加できます。
 

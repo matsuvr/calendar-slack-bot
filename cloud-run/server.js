@@ -445,12 +445,47 @@ function createGoogleCalendarUrl(event) {
 // サーバーの起動
 const PORT = parseInt(process.env.PORT) || 8080;
 (async () => {
-  // Boltアプリを起動
-  await app.start();
-  console.log('⚡️ Bolt app is running!');
-
-  // Expressサーバーは個別に起動する
-  expressReceiver.app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-  });
+  try {
+    // 環境変数のチェック
+    const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'GEMINI_API_KEY'];
+    const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+    
+    if (missingEnvVars.length > 0) {
+      console.error(`以下の環境変数が設定されていません: ${missingEnvVars.join(', ')}`);
+      process.exit(1);
+    }
+    
+    // Expressサーバーを先に起動
+    const server = expressReceiver.app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+    });
+    
+    // サーバー起動のエラーハンドリング
+    server.on('error', (error) => {
+      console.error('サーバー起動エラー:', error);
+      process.exit(1);
+    });
+    
+    // Boltアプリを起動
+    await app.start();
+    console.log('⚡️ Bolt app is running!');
+    
+    // シグナルハンドリングを追加
+    ['SIGINT', 'SIGTERM'].forEach(signal => {
+      process.on(signal, async () => {
+        try {
+          await app.stop();
+          server.close();
+          console.log('アプリケーションを正常に終了しました');
+          process.exit(0);
+        } catch (error) {
+          console.error('アプリケーション終了エラー:', error);
+          process.exit(1);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('アプリケーション起動エラー:', error);
+    process.exit(1);
+  }
 })();
