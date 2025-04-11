@@ -221,6 +221,33 @@ GEMINI_API_KEY=...（ステップ5で取得したAPI Key）</pre>
   `);
 });
 
+// ルートパスでもSlackのチャレンジリクエストを受け付ける
+expressApp.post('/', (req, res) => {
+  console.log('ルートパスでSlackからのリクエスト受信:', req.body);
+  
+  // チャレンジパラメータがある場合はその値をそのまま返す
+  if (req.body && req.body.challenge) {
+    console.log('ルートパスでSlackチャレンジリクエストに応答:', req.body.challenge);
+    return res.status(200).json({ challenge: req.body.challenge });
+  }
+  
+  // デモモードの場合は常に成功を返す（実際の処理は行わない）
+  if (DEMO_MODE) {
+    console.log('デモモード: ルートパスでイベントリクエストを受信しましたが処理はスキップします');
+    return res.status(200).send('OK');
+  }
+  
+  // 本番モードでは/slack/eventsにリダイレクト
+  console.log('ルートパスでイベントを受信。/slack/eventsに転送します');
+  
+  // expressReceiverにリクエストを転送
+  if (expressReceiver) {
+    expressReceiver.app.handle(req, res);
+  } else {
+    res.status(200).send('OK');
+  }
+});
+
 // Expressサーバーを起動
 let server;
 try {
