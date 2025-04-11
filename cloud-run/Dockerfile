@@ -1,5 +1,5 @@
 # Node.jsイメージを使用（package.jsonの要件に合わせて20に更新）
-FROM node:20-slim
+FROM node:22-slim
 
 # アプリケーションディレクトリを作成
 WORKDIR /usr/src/app
