@@ -446,6 +446,8 @@ function createGoogleCalendarUrl(event) {
 const PORT = parseInt(process.env.PORT) || 8080;
 (async () => {
   try {
+    console.log('アプリケーション起動を開始します...');
+    
     // 環境変数のチェック
     const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'GEMINI_API_KEY'];
     const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
@@ -453,11 +455,14 @@ const PORT = parseInt(process.env.PORT) || 8080;
     if (missingEnvVars.length > 0) {
       console.error(`以下の環境変数が設定されていません: ${missingEnvVars.join(', ')}`);
       process.exit(1);
+    } else {
+      console.log('必須環境変数の確認: OK');
     }
     
     // Expressサーバーを先に起動
+    console.log(`ポート ${PORT} でExpressサーバーを起動します...`);
     const server = expressReceiver.app.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
+      console.log(`✅ サーバーの起動成功: ポート ${PORT} でリッスン中`);
     });
     
     // サーバー起動のエラーハンドリング
@@ -467,8 +472,12 @@ const PORT = parseInt(process.env.PORT) || 8080;
     });
     
     // Boltアプリを起動
+    console.log('Slackアプリを起動します...');
     await app.start();
-    console.log('⚡️ Bolt app is running!');
+    console.log('⚡️ Boltアプリの起動成功');
+    
+    // ヘルスチェックエンドポイントのログ
+    console.log('利用可能なエンドポイント: /health (ヘルスチェック)');
     
     // シグナルハンドリングを追加
     ['SIGINT', 'SIGTERM'].forEach(signal => {
@@ -486,6 +495,7 @@ const PORT = parseInt(process.env.PORT) || 8080;
     });
   } catch (error) {
     console.error('アプリケーション起動エラー:', error);
+    console.error(error.stack);
     process.exit(1);
   }
 })();
