@@ -7,8 +7,8 @@ WORKDIR /usr/src/app
 # package.jsonとpackage-lock.jsonをコピー
 COPY package*.json ./
 
-# 依存関係をインストール
-RUN npm ci --only=production
+# 依存関係をインストール（package-lock.jsonの同期問題を解決するためにnpm installを使用）
+RUN npm install --production && npm cache clean --force
 
 # アプリケーションのソースコードをコピー
 COPY . .
