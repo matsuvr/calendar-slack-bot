@@ -71,32 +71,35 @@ expressApp.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Slackのチャレンジリクエストに対応するエンドポイント
-expressApp.post('/slack/events', (req, res) => {
+// Slackのチャレンジリクエストとイベント処理に対応するエンドポイント
+expressApp.post('/slack/events', async (req, res) => {
   console.log('Slackからのリクエスト受信:', req.body);
-  
+
   // チャレンジパラメータがある場合はその値をそのまま返す
   if (req.body && req.body.challenge) {
     console.log('Slackチャレンジリクエストに応答:', req.body.challenge);
     return res.status(200).json({ challenge: req.body.challenge });
   }
-  
+
   // デモモードの場合は常に成功を返す（実際の処理は行わない）
   if (DEMO_MODE) {
     console.log('デモモード: イベントリクエストを受信しましたが処理はスキップします');
     return res.status(200).send('OK');
   }
-  
-  // 本番モードでは、イベントを直接処理せず、すぐにレスポンスを返す
-  // これによりSlackに確認応答を返し、タイムアウトを防止する
-  res.status(200).send('OK');
-  
-  // イベント情報をログに記録
-  if (req.body && req.body.event) {
-    console.log('受信したイベント:', req.body.event.type);
+
+  // 本番モードでは、イベントを処理する
+  try {
+    if (expressReceiver) {
+      // expressReceiverにリクエストを転送
+      await expressReceiver.router.handle(req, res);
+    } else {
+      console.error('ExpressReceiverが初期化されていません');
+      res.status(500).send('Internal Server Error');
+    }
+  } catch (error) {
+    console.error('Slackイベント処理中にエラーが発生しました:', error);
+    res.status(500).send('Internal Server Error');
   }
-  
-  // これ以降の処理はExpressReceiverに委任される
 });
 
 // セットアップガイド用のエンドポイント
