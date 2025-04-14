@@ -90,7 +90,7 @@ expressApp.post('/slack/events', async (req, res) => {
   // 本番モードでは、イベントを処理する
   try {
     if (expressReceiver) {
-      // expressReceiverにリクエストを転送
+      console.log('ExpressReceiverが初期化されています。リクエストを転送します。');
       await expressReceiver.router.handle(req, res);
     } else {
       console.error('ExpressReceiverが初期化されていません');
@@ -232,33 +232,6 @@ GEMINI_API_KEY=...（ステップ5で取得したAPI Key）</pre>
   `);
 });
 
-// ルートパスでもSlackのチャレンジリクエストを受け付ける
-expressApp.post('/', (req, res) => {
-  console.log('ルートパスでSlackからのリクエスト受信:', req.body);
-  
-  // チャレンジパラメータがある場合はその値をそのまま返す
-  if (req.body && req.body.challenge) {
-    console.log('ルートパスでSlackチャレンジリクエストに応答:', req.body.challenge);
-    return res.status(200).json({ challenge: req.body.challenge });
-  }
-  
-  // デモモードの場合は常に成功を返す（実際の処理は行わない）
-  if (DEMO_MODE) {
-    console.log('デモモード: ルートパスでイベントリクエストを受信しましたが処理はスキップします');
-    return res.status(200).send('OK');
-  }
-  
-  // 本番モードでは/slack/eventsにリダイレクト
-  console.log('ルートパスでイベントを受信。/slack/eventsに転送します');
-  
-  // expressReceiverにリクエストを転送
-  if (expressReceiver) {
-    expressReceiver.app.handle(req, res);
-  } else {
-    res.status(200).send('OK');
-  }
-});
-
 // Expressサーバーを起動
 let server;
 try {
@@ -348,13 +321,15 @@ if (DEMO_MODE) {
   // カレンダースタンプのリアクションが追加されたときのイベントハンドラ
   app.event('reaction_added', async ({ event, client, ack }) => {
     try {
+      console.log('reaction_addedイベントを受信:', event);
       // ack()を呼び出してSlackに応答
       await ack();
-      console.log('reaction_addedイベントを処理中:', event.reaction);
-      
+      console.log('ack()が正常に呼び出されました。');
+
       const calendarReactions = ['calendar', 'カレンダー', 'calendar_spiral', 'date', 'カレンダーに入れる', 'calendar-bot'];
 
       if (calendarReactions.includes(event.reaction)) {
+        console.log('カレンダー関連のリアクションが検出されました:', event.reaction);
         const result = await client.conversations.history({
           channel: event.item.channel,
           latest: event.item.ts,
@@ -420,9 +395,11 @@ if (DEMO_MODE) {
             });
           }
         }
+      } else {
+        console.log('カレンダー関連のリアクションではありません:', event.reaction);
       }
     } catch (error) {
-      console.error('エラーが発生しました:', error);
+      console.error('reaction_addedイベント処理中にエラーが発生しました:', error);
 
       try {
         if (event && event.item && event.item.channel && event.item.ts) {
