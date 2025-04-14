@@ -48,7 +48,8 @@ if (DEMO_MODE) {
   try {
     expressReceiver = new ExpressReceiver({
       signingSecret: process.env.SLACK_SIGNING_SECRET || 'dummy-secret-for-startup',
-      processBeforeResponse: true,
+      endpoints: '/slack/events', // Slack APIのRequest URLに合わせる
+      processBeforeResponse: true, // Cloud RunなどのFaaS環境ではtrue推奨
     });
     expressApp = expressReceiver.app;
     console.log('ExpressReceiverの初期化: 成功');
