@@ -87,8 +87,16 @@ expressApp.post('/slack/events', (req, res) => {
     return res.status(200).send('OK');
   }
   
-  // 本番モードでは通常の処理を続行（expressReceiverが処理）
+  // 本番モードでは、イベントを直接処理せず、すぐにレスポンスを返す
+  // これによりSlackに確認応答を返し、タイムアウトを防止する
   res.status(200).send('OK');
+  
+  // イベント情報をログに記録
+  if (req.body && req.body.event) {
+    console.log('受信したイベント:', req.body.event.type);
+  }
+  
+  // これ以降の処理はExpressReceiverに委任される
 });
 
 // セットアップガイド用のエンドポイント
@@ -274,6 +282,42 @@ if (DEMO_MODE) {
   // Slackアプリの初期化
   let app;
   try {
+    // ExpressReceiverのエンドポイント設定を変更（デフォルトの/slack/eventsは使わない）
+    expressReceiver = new ExpressReceiver({
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      endpoints: '/slack/events/internal', // 内部用エンドポイントに変更
+      processBeforeResponse: true,
+    });
+    
+    // カスタムハンドラを追加してSlackからのイベントを適切にルーティング
+    expressApp.post('/slack/events', async (req, res) => {
+      // チャレンジパラメータがある場合はその値をそのまま返す
+      if (req.body && req.body.challenge) {
+        console.log('Slackチャレンジリクエストに応答:', req.body.challenge);
+        return res.status(200).json({ challenge: req.body.challenge });
+      }
+      
+      // 応答を早めに返す
+      res.status(200).send('OK');
+      
+      // イベント情報をログに記録
+      if (req.body && req.body.event) {
+        console.log('受信したイベント:', req.body.event.type);
+        
+        // 内部的にExpressReceiverにイベントを転送（応答はもう返したので無視）
+        try {
+          // POSTリクエストを内部エンドポイントに転送
+          const dummyRes = {
+            status: () => ({ send: () => {} }),
+            send: () => {}
+          };
+          await expressReceiver.router.handle(req, dummyRes);
+        } catch (err) {
+          console.error('イベント転送エラー:', err);
+        }
+      }
+    });
+    
     app = new App({
       token: process.env.SLACK_BOT_TOKEN,
       receiver: expressReceiver,
