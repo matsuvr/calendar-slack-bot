@@ -282,47 +282,51 @@ if (DEMO_MODE) {
   // Slackアプリの初期化
   let app;
   try {
-    // ExpressReceiverのエンドポイント設定を変更（デフォルトの/slack/eventsは使わない）
+    console.log('本番モード: Slack Bolt初期化を開始します');
+    
+    // ExpressReceiverを正しく初期化（デフォルトの/slack/eventsパスを保持）
     expressReceiver = new ExpressReceiver({
       signingSecret: process.env.SLACK_SIGNING_SECRET,
-      endpoints: '/slack/events/internal', // 内部用エンドポイントに変更
-      processBeforeResponse: true,
+      processBeforeResponse: false, // 応答を先に返すように変更
+      endpoints: '/slack/events', // 標準のエンドポイントを使用
     });
     
-    // カスタムハンドラを追加してSlackからのイベントを適切にルーティング
-    expressApp.post('/slack/events', async (req, res) => {
-      // チャレンジパラメータがある場合はその値をそのまま返す
-      if (req.body && req.body.challenge) {
-        console.log('Slackチャレンジリクエストに応答:', req.body.challenge);
-        return res.status(200).json({ challenge: req.body.challenge });
+    // expressAppを更新
+    expressApp = expressReceiver.app;
+    
+    // JSONボディパーサーの状態を確認
+    if (!expressApp._router || !expressApp._router.stack.some(layer => layer.name === 'jsonParser')) {
+      console.log('JSONボディパーサーを追加します');
+      expressApp.use(express.json());
+      expressApp.use(express.urlencoded({ extended: true }));
+    } else {
+      console.log('JSONボディパーサーはすでに設定されています');
+    }
+
+    // エラーが発生した場合のデバッグ情報を追加
+    expressApp.use((err, req, res, next) => {
+      if (err) {
+        console.error('Expressエラー:', err);
+        return res.status(500).send('Internal Server Error');
       }
-      
-      // 応答を早めに返す
-      res.status(200).send('OK');
-      
-      // イベント情報をログに記録
-      if (req.body && req.body.event) {
-        console.log('受信したイベント:', req.body.event.type);
-        
-        // 内部的にExpressReceiverにイベントを転送（応答はもう返したので無視）
-        try {
-          // POSTリクエストを内部エンドポイントに転送
-          const dummyRes = {
-            status: () => ({ send: () => {} }),
-            send: () => {}
-          };
-          await expressReceiver.router.handle(req, dummyRes);
-        } catch (err) {
-          console.error('イベント転送エラー:', err);
-        }
-      }
+      next();
     });
     
     app = new App({
       token: process.env.SLACK_BOT_TOKEN,
       receiver: expressReceiver,
+      processBeforeResponse: false, // 応答を先に返す
     });
     console.log('Slackアプリの初期化: 成功');
+    
+    // デバッグ用のログミドルウェアを追加
+    app.use(async (args) => {
+      console.log(`Slackイベント受信: ${args.payload.type || 'unknown'}`);
+      const result = await args.next();
+      console.log('イベント処理完了');
+      return result;
+    });
+    
   } catch (appInitError) {
     console.error('Slackアプリの初期化に失敗しました:', appInitError);
     process.exit(1);
@@ -339,8 +343,12 @@ if (DEMO_MODE) {
   }
 
   // カレンダースタンプのリアクションが追加されたときのイベントハンドラ
-  app.event('reaction_added', async ({ event, client }) => {
+  app.event('reaction_added', async ({ event, client, ack }) => {
     try {
+      // イベントを承認（これが重要）
+      if (ack && typeof ack === 'function') await ack();
+      console.log('reaction_addedイベントを処理中:', event.reaction);
+      
       const calendarReactions = ['calendar', 'カレンダー', 'calendar_spiral', 'date', 'カレンダーに入れる', 'calendar-bot'];
 
       if (calendarReactions.includes(event.reaction)) {
