@@ -73,35 +73,25 @@ expressApp.get('/health', (req, res) => {
 });
 
 // Slackのチャレンジリクエストとイベント処理に対応するエンドポイント
-expressApp.post('/slack/events', async (req, res) => {
-  console.log('Slackからのリクエスト受信:', req.body);
+if (DEMO_MODE) {
+  // デモモードの場合のみ、直接expressAppにルートを設定
+  expressApp.post('/slack/events', async (req, res) => {
+    console.log('デモモード: Slackからのリクエスト受信:', req.body);
 
-  // チャレンジパラメータがある場合はその値をそのまま返す
-  if (req.body && req.body.challenge) {
-    console.log('Slackチャレンジリクエストに応答:', req.body.challenge);
-    return res.status(200).json({ challenge: req.body.challenge });
-  }
+    // チャレンジパラメータがある場合はその値をそのまま返す
+    if (req.body && req.body.challenge) {
+      console.log('Slackチャレンジリクエストに応答:', req.body.challenge);
+      return res.status(200).json({ challenge: req.body.challenge });
+    }
 
-  // デモモードの場合は常に成功を返す（実際の処理は行わない）
-  if (DEMO_MODE) {
     console.log('デモモード: イベントリクエストを受信しましたが処理はスキップします');
     return res.status(200).send('OK');
-  }
-
-  // 本番モードでは、イベントを処理する
-  try {
-    if (expressReceiver) {
-      console.log('ExpressReceiverが初期化されています。リクエストを転送します。');
-      await expressReceiver.router.handle(req, res);
-    } else {
-      console.error('ExpressReceiverが初期化されていません');
-      res.status(500).send('Internal Server Error');
-    }
-  } catch (error) {
-    console.error('Slackイベント処理中にエラーが発生しました:', error);
-    res.status(500).send('Internal Server Error');
-  }
-});
+  });
+} else {
+  // 本番モードでは、expressReceiverが/slack/eventsを処理するため
+  // ここでの追加ルート定義は不要（むしろ有害）
+  console.log('本番モード: /slack/eventsはExpressReceiverが処理します');
+}
 
 // セットアップガイド用のエンドポイント
 expressApp.get('/', (req, res) => {
@@ -261,15 +251,8 @@ if (DEMO_MODE) {
   try {
     console.log('本番モード: Slack Bolt初期化を開始します');
     
-    // ExpressReceiverを正しく初期化（デフォルトの/slack/eventsパスを保持）
-    expressReceiver = new ExpressReceiver({
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
-      processBeforeResponse: false, // 応答を先に返すように変更
-      endpoints: '/slack/events', // 標準のエンドポイントを使用
-    });
-    
-    // expressAppを更新
-    expressApp = expressReceiver.app;
+    // すでに初期化済みのExpressReceiverを使用（2回目の初期化を避ける）
+    console.log('既存のExpressReceiverを使用します');
     
     // JSONボディパーサーの状態を確認
     if (!expressApp._router || !expressApp._router.stack.some(layer => layer.name === 'jsonParser')) {
