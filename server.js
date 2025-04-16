@@ -648,21 +648,33 @@ if (DEMO_MODE) {
       console.log('場所設定:', event.location);
     }
     
+    // Slackのマークアップ（<URL>形式）を解除する関数
+    function removeSlackUrlMarkup(text) {
+      if (!text) return text;
+      // Slack特有のURL表記 <https://...> からブラケットを除去
+      return text.replace(/<(https?:\/\/[^>|]+)(?:\|[^>]+)?>/g, '$1');
+    }
+
+    // descriptionのURLマークアップを解除
+    if (event.description) {
+      event.description = removeSlackUrlMarkup(event.description);
+    }
+    
     // ビデオ会議URLの検出と設定
     let videoUrl = null;
     if (event.description) {
       // Google Meet URLの検出
-      const meetUrlMatch = event.description.match(/<?(https:\/\/meet\.google\.com\/[a-z0-9\-]+)>?/i);
+      const meetUrlMatch = event.description.match(/https:\/\/meet\.google\.com\/[a-z0-9\-]+/i);
       if (meetUrlMatch) {
-        videoUrl = meetUrlMatch[1];
+        videoUrl = meetUrlMatch[0];
         console.log('Google Meet URL検出:', videoUrl);
         // Google Meetパラメータを追加（カレンダーがMeet統合機能をサポート）
         params.append('add', `conference-${videoUrl}`);
       } else {
-        // Zoom URLの検出
-        const zoomUrlMatch = event.description.match(/<?(https:\/\/[^/]*zoom\.(?:us|com)\/j\/[^>\\s]+)>?/i);
+        // Zoom URLの検出 - Slackマークアップ対応済み
+        const zoomUrlMatch = event.description.match(/https:\/\/[^/]*zoom\.(?:us|com)\/j\/[^\s]+/i);
         if (zoomUrlMatch) {
-          videoUrl = zoomUrlMatch[1];
+          videoUrl = zoomUrlMatch[0];
           console.log('Zoom URL検出:', videoUrl);
           // Zoomの場合はカレンダーのビデオ会議設定を使用
           params.append('add', `conference-${videoUrl}`);
@@ -693,7 +705,7 @@ if (DEMO_MODE) {
         } 
         // HH:MM の形式であれば、:を削除して秒を追加
         else if (event.startTime.match(/^\d{2}:\d{2}$/)) {
-          startTime = event.startTime.replace(':', '') + '00';
+          startTime = event.startTime.replace(/:/g, '') + '00';
         } 
         // その他の形式の場合はそのまま使用
         else {
