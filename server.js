@@ -14,6 +14,9 @@ console.log(`アプリケーション起動プロセスを開始します...`);
 console.log(`設定されたポート: ${PORT}`);
 console.log(`Node.jsバージョン: ${process.version}`);
 console.log(`環境変数NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`SLACK_BOT_TOKEN設定状況: ${process.env.SLACK_BOT_TOKEN ? 'あり' : 'なし'}`);
+console.log(`SLACK_SIGNING_SECRET設定状況: ${process.env.SLACK_SIGNING_SECRET ? 'あり' : 'なし'}`);
+console.log(`GEMINI_API_KEY設定状況: ${process.env.GEMINI_API_KEY ? 'あり' : 'なし'}`);
 
 if (DEMO_MODE) {
   console.log('⚠️ デモモードで起動します（SLACK_BOT_TOKENが設定されていません）');
@@ -49,7 +52,7 @@ if (DEMO_MODE) {
     expressReceiver = new ExpressReceiver({
       signingSecret: process.env.SLACK_SIGNING_SECRET || 'dummy-secret-for-startup',
       endpoints: '/slack/events', // Slack APIのRequest URLに合わせる
-      processBeforeResponse: true, // Cloud RunなどのFaaS環境ではtrue推奨
+      processBeforeResponse: false, // Slackへの応答を優先するためfalseに変更
     });
     expressApp = expressReceiver.app;
     console.log('ExpressReceiverの初期化: 成功');
