@@ -596,11 +596,13 @@ if (DEMO_MODE) {
    */
   function createGoogleCalendarUrl(event) {
     console.log('カレンダーURL生成開始:', event);
-
+    
     const baseUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE';
-
+    
+    // URLパラメータの作成
     const params = new URLSearchParams();
-
+    
+    // タイトル
     if (event.title) {
       params.append('text', event.title);
       console.log('タイトル設定:', event.title);
@@ -608,54 +610,77 @@ if (DEMO_MODE) {
       params.append('text', '無題の予定');
       console.log('タイトルなし、デフォルト設定: 無題の予定');
     }
-
+    
+    // 場所
     if (event.location && event.location !== null) {
       params.append('location', event.location);
       console.log('場所設定:', event.location);
     }
-
-    let meetUrl = null;
+    
+    // ビデオ会議URLの検出と設定
+    let videoUrl = null;
     if (event.description) {
+      // Google Meet URLの検出
       const meetUrlMatch = event.description.match(/<?(https:\/\/meet\.google\.com\/[a-z0-9\-]+)>?/i);
       if (meetUrlMatch) {
-        meetUrl = meetUrlMatch[1];
-        console.log('Google Meet URL検出:', meetUrl);
-        params.append('conferenceData', 'true');
-        params.append('add', `conference-${meetUrl}`);
+        videoUrl = meetUrlMatch[1];
+        console.log('Google Meet URL検出:', videoUrl);
+        // Google Meetパラメータを追加（カレンダーがMeet統合機能をサポート）
+        params.append('add', `conference-${videoUrl}`);
+      } else {
+        // Zoom URLの検出
+        const zoomUrlMatch = event.description.match(/<?(https:\/\/[^/]*zoom\.(?:us|com)\/j\/[^>\\s]+)>?/i);
+        if (zoomUrlMatch) {
+          videoUrl = zoomUrlMatch[1];
+          console.log('Zoom URL検出:', videoUrl);
+          // Zoomの場合はカレンダーのビデオ会議設定を使用
+          params.append('add', `conference-${videoUrl}`);
+        }
       }
     }
-
+    
+    // 説明
     if (event.description && event.description !== null) {
       params.append('details', event.description);
       console.log('説明設定:', event.description);
     }
-
+    
+    // 日時
     if (event.date) {
       console.log('日付情報あり:', event.date);
       let dates = '';
-
+      
+      // 開始日時 - YYYYMMDDTHHMMSS 形式が必要
       const startDate = event.date.replace(/-/g, '');
-
+      
+      // 時間から:を削除し、秒を追加せずに使用
       let startTime = '';
       if (event.startTime) {
+        // HH:MM:SS の形式であれば、そのまま:を削除
         if (event.startTime.match(/^\d{2}:\d{2}:\d{2}$/)) {
           startTime = event.startTime.replace(/:/g, '');
-        } else if (event.startTime.match(/^\d{2}:\d{2}$/)) {
+        } 
+        // HH:MM の形式であれば、:を削除して秒を追加
+        else if (event.startTime.match(/^\d{2}:\d{2}$/)) {
           startTime = event.startTime.replace(':', '') + '00';
-        } else {
+        } 
+        // その他の形式の場合はそのまま使用
+        else {
           startTime = event.startTime.replace(/:/g, '');
-          if (startTime.length === 4) startTime += '00';
+          if (startTime.length === 4) startTime += '00'; // 4桁の場合は秒を追加
         }
       } else {
         startTime = '000000';
       }
-
+      
       dates += `${startDate}T${startTime}`;
       console.log('開始日時パラメータ(正確なフォーマット):', `${startDate}T${startTime}`);
-
+      
+      // 終了日時
       dates += '/';
       const endDate = event.date.replace(/-/g, '');
-
+      
+      // 終了時間も同様に処理
       let endTime = '';
       if (event.endTime) {
         if (event.endTime.match(/^\d{2}:\d{2}:\d{2}$/)) {
@@ -667,23 +692,25 @@ if (DEMO_MODE) {
           if (endTime.length === 4) endTime += '00';
         }
       } else {
-        endTime = startTime !== '000000' ?
-          (parseInt(startTime.substring(0, 2)) + 1).toString().padStart(2, '0') + startTime.substring(2) :
-          '235900';
+        // 開始時間がある場合は1時間後、ない場合は終日
+        endTime = startTime !== '000000' ? 
+                 (parseInt(startTime.substring(0, 2)) + 1).toString().padStart(2, '0') + startTime.substring(2) :
+                 '235900';
       }
-
+      
       dates += `${endDate}T${endTime}`;
       console.log('終了日時パラメータ(正確なフォーマット):', `${endDate}T${endTime}`);
-
+      
       params.append('dates', dates);
     } else {
       console.log('日付情報なし、今日の日付を使用');
+      // 日付がない場合は今日の日付を使用
       const today = new Date();
       const todayFormatted = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
-      params.append('dates', `${todayFormatted}T120000/${todayFormatted}T130000`);
+      params.append('dates', `${todayFormatted}T120000/${todayFormatted}T130000`); // デフォルトは12:00-13:00
       console.log('デフォルト日時パラメータ設定:', `${todayFormatted}T120000/${todayFormatted}T130000`);
     }
-
+    
     const finalUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + params.toString();
     console.log('生成されたカレンダーURL:', finalUrl);
     return finalUrl;
