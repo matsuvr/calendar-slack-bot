@@ -331,52 +331,75 @@ if (DEMO_MODE) {
             name: 'hourglass_flowing_sand'
           });
 
-          const events = await extractEventsFromText(message.text);
+          // Slackの投稿URLを生成
+          const teamId = process.env.SLACK_TEAM_ID || '';
+          const messageUrl = `https://${teamId || 'app'}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
+          
+          // オリジナルメッセージテキストを保持（GeminiAPIを介さない）
+          const originalMessageText = message.text;
+          
+          try {
+            // Gemini APIを使用して日付と時間の情報だけ抽出
+            const events = await extractEventsFromText(originalMessageText);
 
-          await client.reactions.remove({
-            channel: event.item.channel,
-            timestamp: event.item.ts,
-            name: 'hourglass_flowing_sand'
-          });
-
-          if (events.length > 0) {
-            for (const eventItem of events) {
-              try {
-                if (eventItem.startTime && !eventItem.startTime.includes(':00')) {
-                  eventItem.startTime = eventItem.startTime + ':00';
-                }
-
-                if (eventItem.endTime && !eventItem.endTime.includes(':00')) {
-                  eventItem.endTime = eventItem.endTime + ':00';
-                }
-
-                const calendarUrl = createGoogleCalendarUrl(eventItem);
-
-                await client.chat.postMessage({
-                  channel: event.item.channel,
-                  thread_ts: event.item.ts,
-                  text: `予定を検出しました: ${eventItem.title}\n${calendarUrl}`
-                });
-              } catch (itemError) {
-                console.error('個別の予定処理でエラー:', itemError);
-                await client.chat.postMessage({
-                  channel: event.item.channel,
-                  thread_ts: event.item.ts,
-                  text: `この予定の処理中にエラーが発生しました: ${eventItem.title}\nエラー: ${itemError.message}`
-                });
-              }
-            }
-          } else {
-            await client.reactions.add({
+            await client.reactions.remove({
               channel: event.item.channel,
               timestamp: event.item.ts,
-              name: 'no_entry_sign'
+              name: 'hourglass_flowing_sand'
             });
 
+            if (events.length > 0) {
+              for (const eventItem of events) {
+                try {
+                  if (eventItem.startTime && !eventItem.startTime.includes(':00')) {
+                    eventItem.startTime = eventItem.startTime + ':00';
+                  }
+
+                  if (eventItem.endTime && !eventItem.endTime.includes(':00')) {
+                    eventItem.endTime = eventItem.endTime + ':00';
+                  }
+
+                  // オリジナルメッセージとSlackの投稿URLを説明に含める
+                  const description = `${originalMessageText}\n\nSlack投稿: ${messageUrl}`;
+                  
+                  // descriptionを上書きして元のテキストを使用
+                  eventItem.description = description;
+                  
+                  const calendarUrl = createGoogleCalendarUrl(eventItem);
+
+                  await client.chat.postMessage({
+                    channel: event.item.channel,
+                    thread_ts: event.item.ts,
+                    text: `予定を検出しました: ${eventItem.title}\n${calendarUrl}`
+                  });
+                } catch (itemError) {
+                  console.error('個別の予定処理でエラー:', itemError);
+                  await client.chat.postMessage({
+                    channel: event.item.channel,
+                    thread_ts: event.item.ts,
+                    text: `この予定の処理中にエラーが発生しました: ${eventItem.title}\nエラー: ${itemError.message}`
+                  });
+                }
+              }
+            } else {
+              await client.reactions.add({
+                channel: event.item.channel,
+                timestamp: event.item.ts,
+                name: 'no_entry_sign'
+              });
+
+              await client.chat.postMessage({
+                channel: event.item.channel,
+                thread_ts: event.item.ts,
+                text: '予定情報を検出できませんでした。'
+              });
+            }
+          } catch (apiError) {
+            console.error('APIリクエスト処理エラー:', apiError);
             await client.chat.postMessage({
               channel: event.item.channel,
               thread_ts: event.item.ts,
-              text: '予定情報を検出できませんでした。'
+              text: `エラーが発生しました: ${apiError.message}`
             });
           }
         }
@@ -423,6 +446,10 @@ if (DEMO_MODE) {
         
         location項目には物理的な場所のみを入れ、オンラインミーティングのURLは含めないでください。
         オンラインミーティングのURLやその他の詳細情報はdescription項目に入れてください。
+
+        非常に重要: descriptionフィールドには元の投稿テキストのすべての情報を保持してください。
+        特に、Zoom、Google Meet、Teamsなどのミーティングリンクは必ず完全な形でdescriptionに含めてください。
+        URLは改変せず、元のまま保持することが非常に重要です。
       `;
 
       const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;
@@ -540,6 +567,10 @@ if (DEMO_MODE) {
             "description": "オンラインでの参加リンク: https://example.com/meeting\\nミーティングの詳細説明..."
           }
         ]
+        
+        非常に重要: descriptionフィールドには元の投稿テキストのすべての情報を保持してください。
+        特に、Zoom、Google Meet、Teamsなどのミーティングリンクは必ず完全な形でdescriptionに含めてください。
+        URLは改変せず、元のまま保持することが非常に重要です。
         
         location項目が存在しない場合はnullとして返してください。
         予定が見つからない場合は空の配列[]を返してください。
