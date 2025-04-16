@@ -306,12 +306,10 @@ if (DEMO_MODE) {
   }
 
   // カレンダースタンプのリアクションが追加されたときのイベントハンドラ
-  app.event('reaction_added', async ({ event, client, ack }) => {
+  app.event('reaction_added', async ({ event, client }) => {
     try {
       console.log('reaction_addedイベントを受信:', event);
-      // ack()を呼び出してSlackに応答
-      await ack();
-      console.log('ack()が正常に呼び出されました。');
+      // ack()の呼び出しは不要なので削除
 
       const calendarReactions = ['calendar', 'カレンダー', 'calendar_spiral', 'date', 'カレンダーに入れる', 'calendar-bot'];
 
