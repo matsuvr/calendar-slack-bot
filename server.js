@@ -484,7 +484,8 @@ if (DEMO_MODE) {
         }
       });
 
-      const jsonResponse = response.text();
+      // 新しいGemini API応答形式に合わせて修正
+      const jsonResponse = response.candidates[0].content.parts[0].text;
 
       try {
         const parsedEvents = JSON.parse(jsonResponse);
@@ -546,7 +547,7 @@ if (DEMO_MODE) {
       `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-001',
+        model: 'gemini-2.0-flash',
         contents: `${prompt}\n\nテキスト: ${text}`,
         config: {
           generationConfig: {
@@ -556,7 +557,8 @@ if (DEMO_MODE) {
         }
       });
 
-      const responseText = response.text();
+      // 新しいGemini API応答形式に合わせて修正
+      const responseText = response.candidates[0].content.parts[0].text;
 
       try {
         try {
