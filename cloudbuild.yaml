@@ -1,0 +1,27 @@
+steps:
+  # コンテナイメージをビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/calendar-slack-bot', '.']
+  
+  # コンテナイメージをContainer Registryにプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/calendar-slack-bot']
+  
+  # コンテナイメージをCloud Runにデプロイ
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'calendar-slack-bot'
+      - '--image=gcr.io/$PROJECT_ID/calendar-slack-bot'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+
+# Cloud Loggingを使用してエラーを解決
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/$PROJECT_ID/calendar-slack-bot'
