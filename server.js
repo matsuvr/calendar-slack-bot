@@ -2,15 +2,17 @@ const { App, ExpressReceiver } = require('@slack/bolt');
 const { GoogleGenAI } = require('@google/genai');
 const express = require('express');
 require('dotenv').config();
+const { Firestore } = require('@google-cloud/firestore');
+
+// Firestoreの初期化
+const firestore = new Firestore();
+const processedReactionsCollection = firestore.collection('processedReactions');
 
 // ポート番号の設定
 const PORT = parseInt(process.env.PORT) || 8080;
 
 // デモモードの判定
 const DEMO_MODE = !process.env.SLACK_BOT_TOKEN;
-
-// 処理済みリアクションを追跡するためのセット
-const processedReactions = new Set();
 
 // デバッグ情報の表示
 console.log(`アプリケーション起動プロセスを開始します...`);
@@ -20,6 +22,7 @@ console.log(`環境変数NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`SLACK_BOT_TOKEN設定状況: ${process.env.SLACK_BOT_TOKEN ? 'あり' : 'なし'}`);
 console.log(`SLACK_SIGNING_SECRET設定状況: ${process.env.SLACK_SIGNING_SECRET ? 'あり' : 'なし'}`);
 console.log(`GEMINI_API_KEY設定状況: ${process.env.GEMINI_API_KEY ? 'あり' : 'なし'}`);
+console.log(`Firestoreコレクション: processedReactions - 重複チェックに使用`);
 
 if (DEMO_MODE) {
   console.log('⚠️ デモモードで起動します（SLACK_BOT_TOKENが設定されていません）');
@@ -321,11 +324,21 @@ if (DEMO_MODE) {
 
         // 処理済みリアクションをチェック
         const reactionKey = `${event.item.channel}-${event.item.ts}-${event.reaction}`;
-        if (processedReactions.has(reactionKey)) {
+        const firestoreDoc = await processedReactionsCollection.doc(reactionKey).get();
+        if (firestoreDoc.exists) {
           console.log('このリアクションはすでに処理済みです:', reactionKey);
           return;
         }
-        processedReactions.add(reactionKey);
+
+        // Firestoreに処理済みとして記録
+        await processedReactionsCollection.doc(reactionKey).set({ 
+          processed: true,
+          channel: event.item.channel,
+          timestamp: event.item.ts,
+          reaction: event.reaction,
+          user: event.user,
+          processedAt: new Date()
+        });
 
         const result = await client.conversations.history({
           channel: event.item.channel,
