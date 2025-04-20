@@ -228,199 +228,46 @@ if (DEMO_MODE) {
     process.exit(1);
   }
 
-  // カレンダースタンプのリアクションが追加されたときのイベントハンドラ
-  app.event('reaction_added', async ({ event, client }) => {
+  /**
+   * テキストを要約する関数
+   * @param {string} text - 要約するテキスト
+   * @returns {string} - 要約されたテキスト
+   */
+  async function summarizeText(text) {
     try {
-      console.log('reaction_addedイベントを受信:', event);
-      // ack()の呼び出しは不要なので削除
-
-      const calendarReactions = ['calendar', 'カレンダー', 'calendar_spiral', 'date', 'カレンダーに入れる', 'calendar-bot'];
-
-      if (calendarReactions.includes(event.reaction)) {
-        console.log('カレンダー関連のリアクションが検出されました:', event.reaction);
-
-        // 処理済みリアクションをチェック
-        const reactionKey = `${event.item.channel}-${event.item.ts}-${event.reaction}`;
-        console.log(`Firestoreでの重複チェック実行: キー=${reactionKey}`);
-        
-        try {
-          const firestoreDoc = await processedReactionsCollection.doc(reactionKey).get();
-          console.log('Firestoreからドキュメント取得結果:', firestoreDoc.exists ? 'ドキュメント存在' : 'ドキュメント未存在');
-          
-          if (firestoreDoc.exists) {
-            console.log('このリアクションはすでに処理済みです:', reactionKey);
-            return;
-          }
-        } catch (firestoreReadError) {
-          console.error('Firestoreの読み取り操作でエラー:', firestoreReadError);
-          // 読み取りに失敗しても処理を続行
-        }
-
-        // Firestoreに処理済みとして記録
-        try {
-          console.log('Firestoreにデータを書き込み開始:', reactionKey);
-          
-          // Firestoreが読み取り専用モードかどうかチェック
-          if (FIRESTORE_READONLY) {
-            console.log('⚠️ Firestoreは読み取り専用モードです。書き込みをスキップします:', reactionKey);
-            console.log('環境変数FIRESTORE_READONLY=trueが設定されているか、または明示的にフラグが有効化されています');
-            // 読み取り専用モードの場合は書き込みをスキップし、正常に続行
-          } else {
-            // 通常モード：Firestoreに書き込み
-            await processedReactionsCollection.doc(reactionKey).set({ 
-              processed: true,
-              channel: event.item.channel,
-              timestamp: event.item.ts,
-              reaction: event.reaction,
-              user: event.user,
-              processedAt: new Date()
-            });
-            console.log('Firestoreへの書き込み成功:', reactionKey);
-          }
-        } catch (firestoreWriteError) {
-          console.error('Firestoreの書き込み操作でエラー:', firestoreWriteError);
-          console.error('エラーコード:', firestoreWriteError.code);
-          console.error('エラーメッセージ:', firestoreWriteError.message);
-          console.error('エラー詳細:', JSON.stringify(firestoreWriteError, null, 2));
-          
-          // 権限エラーの場合、読み取り専用モードを推奨
-          if (firestoreWriteError.code === 7 || 
-              firestoreWriteError.message?.includes('PERMISSION_DENIED') || 
-              firestoreWriteError.message?.includes('Missing or insufficient permissions')) {
-            console.error('⚠️ Firestoreへの書き込み権限がありません。環境変数FIRESTORE_READONLY=trueを設定することで、');
-            console.error('読み取り専用モードで動作します（重複リアクション処理のリスクはありますが、機能は動作します）');
-          }
-          
-          // Firestoreエラーがあっても処理を続行（重複処理のリスクはあるが機能は動作させる）
-          console.log('Firestoreエラーを無視して処理を続行します');
-        }
-
-        const result = await client.conversations.history({
-          channel: event.item.channel,
-          latest: event.item.ts,
-          inclusive: true,
-          limit: 1
-        });
-
-        const message = result.messages[0];
-
-        if (message && message.text) {
-          await client.reactions.add({
-            channel: event.item.channel,
-            timestamp: event.item.ts,
-            name: 'hourglass_flowing_sand'
-          });
-
-          // Slackの投稿URLを生成
-          const teamId = process.env.SLACK_TEAM_ID || '';
-          const messageUrl = `https://${teamId || 'app'}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
-          
-          // オリジナルメッセージテキストを保持（GeminiAPIを介さない）
-          const originalMessageText = message.text;
-          
-          try {
-            // Gemini APIを使用して日付と時間の情報だけ抽出
-            const events = await extractEventsFromText(originalMessageText);
-
-            await client.reactions.remove({
-              channel: event.item.channel,
-              timestamp: event.item.ts,
-              name: 'hourglass_flowing_sand'
-            });
-
-            if (events.length > 0) {
-              for (const eventItem of events) {
-                try {
-                  if (eventItem.startTime && !eventItem.startTime.includes(':00')) {
-                    eventItem.startTime = eventItem.startTime + ':00';
-                  }
-
-                  if (eventItem.endTime && !eventItem.endTime.includes(':00')) {
-                    eventItem.endTime = eventItem.endTime + ':00';
-                  }
-
-                  // 長い説明文を要約する処理を追加
-                  let finalDescription = originalMessageText;
-                  // 説明が100文字を超える場合は要約
-                  if (originalMessageText.length > 100) {
-                    try {
-                      // Gemini APIを使用して要約
-                      const summaryResponse = await summarizeText(originalMessageText);
-                      if (summaryResponse && summaryResponse.trim() !== '') {
-                        finalDescription = summaryResponse;
-                      }
-                    } catch (summaryError) {
-                      console.error('テキスト要約中にエラー:', summaryError);
-                      // 要約に失敗した場合は、単純に切り詰める
-                      finalDescription = originalMessageText.substring(0, 97) + '...';
-                    }
-                  }
-
-                  // Slack投稿URLは常に含める (これは100文字制限とは別カウント)
-                  finalDescription = `${finalDescription}\n\nSlack投稿: ${messageUrl}`;
-                  
-                  // descriptionを上書きして要約されたテキストを使用
-                  eventItem.description = finalDescription;
-                  
-                  const calendarUrl = createGoogleCalendarUrl(eventItem);
-
-                  await client.chat.postMessage({
-                    channel: event.item.channel,
-                    thread_ts: event.item.ts,
-                    text: `予定を検出しました: ${eventItem.title}\n${calendarUrl}`
-                  });
-                } catch (itemError) {
-                  console.error('個別の予定処理でエラー:', itemError);
-                  await client.chat.postMessage({
-                    channel: event.item.channel,
-                    thread_ts: event.item.ts,
-                    text: `この予定の処理中にエラーが発生しました: ${eventItem.title}\nエラー: ${itemError.message}`
-                  });
-                }
-              }
-            } else {
-              await client.reactions.add({
-                channel: event.item.channel,
-                timestamp: event.item.ts,
-                name: 'no_entry_sign'
-              });
-
-              await client.chat.postMessage({
-                channel: event.item.channel,
-                thread_ts: event.item.ts,
-                text: '予定情報を検出できませんでした。'
-              });
-            }
-          } catch (apiError) {
-            console.error('APIリクエスト処理エラー:', apiError);
-            await client.chat.postMessage({
-              channel: event.item.channel,
-              thread_ts: event.item.ts,
-              text: `エラーが発生しました: ${apiError.message}`
-            });
-          }
-        }
-      } else {
-        console.log('カレンダー関連のリアクションではありません:', event.reaction);
+      // 短いテキストは要約せずそのまま返す（効率化）
+      if (text.length <= 100) {
+        console.log('テキストが短いため要約をスキップします');
+        return text;
       }
+      
+      // 要約処理の開始時間を記録（パフォーマンス測定用）
+      const startTime = Date.now();
+      
+      const prompt = `以下のテキストを100文字以内で要約してください。重要な情報（日時、会議タイトル、ミーティングIDなど）は必ず含めてください。不要な挨拶や冗長な表現は省略してください:\n${text}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-lite',
+        contents: prompt,
+        config: {
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.8,
+            maxOutputTokens: 100
+          }
+        }
+      });
+
+      const summary = response.candidates[0].content.parts[0].text.trim();
+      const processingTime = Date.now() - startTime;
+      console.log(`要約テキスト生成: ${summary} (処理時間: ${processingTime}ms)`);
+      return summary;
     } catch (error) {
-      console.error('reaction_addedイベント処理中にエラーが発生しました:', error);
-
-      try {
-        if (event && event.item && event.item.channel && event.item.ts) {
-          await client.chat.postMessage({
-            channel: event.item.channel,
-            thread_ts: event.item.ts,
-            text: `エラーが発生しました: ${error.message}`
-          });
-        } else {
-          console.error('イベント情報が不完全です:', event);
-        }
-      } catch (postError) {
-        console.error('エラーメッセージの投稿に失敗しました:', postError);
-      }
+      console.error('Gemini API要約エラー:', error);
+      // エラーが発生した場合は簡易的な要約を行う（API呼び出しなし）
+      return text.substring(0, 97) + '...';
     }
-  });
+  }
 
   /**
    * テキストから予定情報を抽出する関数
@@ -429,9 +276,16 @@ if (DEMO_MODE) {
    */
   async function extractEventsFromText(text) {
     try {
+      const extractionStartTime = Date.now(); // 処理時間計測開始
       const now = new Date();
       const currentDate = now.toISOString().split('T')[0];
       const currentTime = now.toTimeString().slice(0, 5);
+
+      // 予定情報が含まれていない可能性が高いテキストは早期リターン
+      if (text.length < 10) {
+        console.log('テキストが短すぎるため抽出をスキップします:', text);
+        return [];
+      }
 
       const systemPrompt = `
         あなたはテキストから予定やイベント情報を抽出するシステムです。
@@ -444,9 +298,8 @@ if (DEMO_MODE) {
         location項目には物理的な場所のみを入れ、オンラインミーティングのURLは含めないでください。
         オンラインミーティングのURLやその他の詳細情報はdescription項目に入れてください。
 
-        非常に重要: descriptionフィールドには元の投稿テキストのすべての情報を保持してください。
         特に、Zoom、Google Meet、Teamsなどのミーティングリンクは必ず完全な形でdescriptionに含めてください。
-        URLは改変せず、元のまま保持することが非常に重要です。
+        ミーティング以外のURLについても改変せず、元のまま保持することが非常に重要です。
       `;
 
       const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;
@@ -487,6 +340,7 @@ if (DEMO_MODE) {
         }
       };
 
+      // 構造化出力モデルを使用 (高速)
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
         contents: [
@@ -513,6 +367,8 @@ if (DEMO_MODE) {
 
       try {
         const parsedEvents = JSON.parse(jsonResponse);
+        const processingTime = Date.now() - extractionStartTime;
+        console.log(`イベント抽出処理完了: 所要時間=${processingTime}ms, 抽出数=${Array.isArray(parsedEvents) ? parsedEvents.length : 0}`);
 
         if (Array.isArray(parsedEvents)) {
           return parsedEvents;
@@ -520,6 +376,7 @@ if (DEMO_MODE) {
           return [];
         }
       } catch (parseError) {
+        console.error('JSON解析エラー、レガシーモードにフォールバック:', parseError);
         return await extractEventsLegacy(text);
       }
     } catch (error) {
@@ -535,6 +392,9 @@ if (DEMO_MODE) {
    */
   async function extractEventsLegacy(text) {
     try {
+      console.log('レガシーモードでのイベント抽出を開始します');
+      const legacyStartTime = Date.now();
+      
       const now = new Date();
       const currentDate = now.toISOString().split('T')[0];
       const currentTime = now.toTimeString().slice(0, 5);
@@ -553,25 +413,8 @@ if (DEMO_MODE) {
         - 場所（物理的な場所のみ。オンラインミーティングのURLは含めないでください）(location)
         - 説明（オンラインミーティングのURLや詳細情報を含む）(description)
         
-        必ず以下の形式のJSONの配列で返してください:
-        [
-          {
-            "title": "ミーティングのタイトル",
-            "date": "2025-03-28",
-            "startTime": "14:00",
-            "endTime": "15:00",
-            "location": "会議室A",
-            "description": "オンラインでの参加リンク: https://example.com/meeting\\nミーティングの詳細説明..."
-          }
-        ]
-        
-        非常に重要: descriptionフィールドには元の投稿テキストのすべての情報を保持してください。
-        特に、Zoom、Google Meet、Teamsなどのミーティングリンクは必ず完全な形でdescriptionに含めてください。
-        URLは改変せず、元のまま保持することが非常に重要です。
-        
-        location項目が存在しない場合はnullとして返してください。
+        JSONの配列形式のみで返してください。余分なテキストは含めないでください。
         予定が見つからない場合は空の配列[]を返してください。
-        JSONの形式を厳密に守り、余分なテキストは含めないでください。
       `;
 
       const response = await ai.models.generateContent({
@@ -580,7 +423,8 @@ if (DEMO_MODE) {
         config: {
           generationConfig: {
             temperature: 0.2,
-            topP: 0.8
+            topP: 0.8,
+            maxOutputTokens: 1024
           }
         }
       });
@@ -589,26 +433,32 @@ if (DEMO_MODE) {
       const responseText = response.candidates[0].content.parts[0].text;
 
       try {
+        let parsedJson;
+        // 直接JSONとして解析を試みる
         try {
-          const parsedJson = JSON.parse(responseText.trim());
-          return Array.isArray(parsedJson) ? parsedJson : [];
+          parsedJson = JSON.parse(responseText.trim());
         } catch (directParseError) {
+          // コードブロック内のJSONを探す
           const jsonBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
           if (jsonBlockMatch) {
-            const parsedJson = JSON.parse(jsonBlockMatch[1].trim());
-            return Array.isArray(parsedJson) ? parsedJson : [];
-          }
-
-          const jsonMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-          if (jsonMatch) {
-            const parsedJson = JSON.parse(jsonMatch[0]);
-            return Array.isArray(parsedJson) ? parsedJson : [];
+            parsedJson = JSON.parse(jsonBlockMatch[1].trim());
           } else {
-            return [];
+            // 配列形式の文字列を探す
+            const jsonMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+            if (jsonMatch) {
+              parsedJson = JSON.parse(jsonMatch[0]);
+            } else {
+              return [];
+            }
           }
         }
+        
+        const processingTime = Date.now() - legacyStartTime;
+        console.log(`レガシーモードでのイベント抽出完了: 所要時間=${processingTime}ms, イベント数=${Array.isArray(parsedJson) ? parsedJson.length : 0}`);
+        
+        return Array.isArray(parsedJson) ? parsedJson : [];
       } catch (parseError) {
-        console.error('JSON解析エラー:', parseError);
+        console.error('レガシーモードのJSON解析エラー:', parseError);
         return [];
       }
     } catch (error) {
@@ -618,61 +468,27 @@ if (DEMO_MODE) {
   }
 
   /**
-   * テキストを要約する関数
-   * @param {string} text - 要約するテキスト
-   * @returns {string} - 要約されたテキスト
-   */
-  async function summarizeText(text) {
-    try {
-      const prompt = `以下のテキストを100文字以内で要約してください。重要な情報（日時、会議タイトル、ミーティングIDなど）は必ず含めてください。不要な挨拶や冗長な表現は省略してください:\n${text}`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt,
-        config: {
-          generationConfig: {
-            temperature: 0.2,
-            topP: 0.8,
-            maxOutputTokens: 100
-          }
-        }
-      });
-
-      const summary = response.candidates[0].content.parts[0].text.trim();
-      console.log('要約テキスト生成:', summary);
-      return summary;
-    } catch (error) {
-      console.error('Gemini API要約エラー:', error);
-      throw error;
-    }
-  }
-
-  /**
    * 予定情報からGoogleカレンダーのURLを生成する関数
    * @param {Object} event - 予定情報
    * @returns {string} - Googleカレンダー追加用のURL
    */
   function createGoogleCalendarUrl(event) {
-    console.log('カレンダーURL生成開始:', event);
+    const urlGenStartTime = Date.now();
+    console.log('カレンダーURL生成開始:', event.title || '無題の予定');
     
     const baseUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE';
-    
-    // URLパラメータの作成
     const params = new URLSearchParams();
     
     // タイトル
     if (event.title) {
       params.append('text', event.title);
-      console.log('タイトル設定:', event.title);
     } else {
       params.append('text', '無題の予定');
-      console.log('タイトルなし、デフォルト設定: 無題の予定');
     }
     
     // 場所
     if (event.location && event.location !== null) {
       params.append('location', event.location);
-      console.log('場所設定:', event.location);
     }
     
     // Slackのマークアップ（<URL>形式）を解除する関数
@@ -694,16 +510,12 @@ if (DEMO_MODE) {
       const meetUrlMatch = event.description.match(/https:\/\/meet\.google\.com\/[a-z0-9\-]+/i);
       if (meetUrlMatch) {
         videoUrl = meetUrlMatch[0];
-        console.log('Google Meet URL検出:', videoUrl);
-        // Google Meetパラメータを追加（カレンダーがMeet統合機能をサポート）
         params.append('add', `conference-${videoUrl}`);
       } else {
         // Zoom URLの検出 - Slackマークアップ対応済み
         const zoomUrlMatch = event.description.match(/https:\/\/[^/]*zoom\.(?:us|com)\/j\/[^\s]+/i);
         if (zoomUrlMatch) {
           videoUrl = zoomUrlMatch[0];
-          console.log('Zoom URL検出:', videoUrl);
-          // Zoomの場合はカレンダーのビデオ会議設定を使用
           params.append('add', `conference-${videoUrl}`);
         }
       }
@@ -712,55 +524,36 @@ if (DEMO_MODE) {
     // 説明
     if (event.description && event.description !== null) {
       params.append('details', event.description);
-      console.log('説明設定:', event.description);
     }
     
     // 日時
     if (event.date) {
-      console.log('日付情報あり:', event.date);
       let dates = '';
       
       // 開始日時 - YYYYMMDDTHHMMSS 形式が必要
       const startDate = event.date.replace(/-/g, '');
       
-      // 時間から:を削除し、秒を追加せずに使用
+      // 時間処理の効率化
       let startTime = '';
       if (event.startTime) {
-        // HH:MM:SS の形式であれば、そのまま:を削除
-        if (event.startTime.match(/^\d{2}:\d{2}:\d{2}$/)) {
-          startTime = event.startTime.replace(/:/g, '');
-        } 
-        // HH:MM の形式であれば、:を削除して秒を追加
-        else if (event.startTime.match(/^\d{2}:\d{2}$/)) {
-          startTime = event.startTime.replace(/:/g, '') + '00';
-        } 
-        // その他の形式の場合はそのまま使用
-        else {
-          startTime = event.startTime.replace(/:/g, '');
-          if (startTime.length === 4) startTime += '00'; // 4桁の場合は秒を追加
-        }
+        // 形式から:を削除して標準化
+        startTime = event.startTime.replace(/:/g, '');
+        if (startTime.length === 4) startTime += '00'; // 秒を追加
       } else {
-        startTime = '000000';
+        startTime = '000000'; // デフォルト
       }
       
       dates += `${startDate}T${startTime}`;
-      console.log('開始日時パラメータ(正確なフォーマット):', `${startDate}T${startTime}`);
       
       // 終了日時
       dates += '/';
       const endDate = event.date.replace(/-/g, '');
       
-      // 終了時間も同様に処理
+      // 終了時間の処理
       let endTime = '';
       if (event.endTime) {
-        if (event.endTime.match(/^\d{2}:\d{2}:\d{2}$/)) {
-          endTime = event.endTime.replace(/:/g, '');
-        } else if (event.endTime.match(/^\d{2}:\d{2}$/)) {
-          endTime = event.endTime.replace(':', '') + '00';
-        } else {
-          endTime = event.endTime.replace(/:/g, '');
-          if (endTime.length === 4) endTime += '00';
-        }
+        endTime = event.endTime.replace(/:/g, '');
+        if (endTime.length === 4) endTime += '00';
       } else {
         // 開始時間がある場合は1時間後、ない場合は終日
         endTime = startTime !== '000000' ? 
@@ -769,22 +562,234 @@ if (DEMO_MODE) {
       }
       
       dates += `${endDate}T${endTime}`;
-      console.log('終了日時パラメータ(正確なフォーマット):', `${endDate}T${endTime}`);
-      
       params.append('dates', dates);
     } else {
-      console.log('日付情報なし、今日の日付を使用');
-      // 日付がない場合は今日の日付を使用
+      // 日付がない場合は今日の日付でデフォルト設定
       const today = new Date();
       const todayFormatted = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
       params.append('dates', `${todayFormatted}T120000/${todayFormatted}T130000`); // デフォルトは12:00-13:00
-      console.log('デフォルト日時パラメータ設定:', `${todayFormatted}T120000/${todayFormatted}T130000`);
     }
     
     const finalUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + params.toString();
-    console.log('生成されたカレンダーURL:', finalUrl);
+    console.log(`カレンダーURL生成完了: ${event.title || '無題の予定'} (所要時間: ${Date.now() - urlGenStartTime}ms)`);
     return finalUrl;
   }
+
+  // カレンダースタンプのリアクションが追加されたときのイベントハンドラ
+  app.event('reaction_added', async ({ event, client }) => {
+    try {
+      console.log('reaction_addedイベントを受信:', event);
+      const processingStartTime = Date.now(); // 処理時間計測開始
+
+      const calendarReactions = ['calendar', 'カレンダー', 'calendar_spiral', 'date', 'カレンダーに入れる', 'calendar-bot'];
+
+      if (calendarReactions.includes(event.reaction)) {
+        console.log('カレンダー関連のリアクションが検出されました:', event.reaction);
+
+        // 処理済みリアクションをチェック
+        const reactionKey = `${event.item.channel}-${event.item.ts}-${event.reaction}`;
+        console.log(`Firestoreでの重複チェック実行: キー=${reactionKey}`);
+        
+        try {
+          // トランザクションを使用して読み取りと書き込みを原子的に行う
+          if (!FIRESTORE_READONLY) {
+            const result = await firestore.runTransaction(async (transaction) => {
+              const docRef = processedReactionsCollection.doc(reactionKey);
+              const docSnapshot = await transaction.get(docRef);
+              
+              if (docSnapshot.exists) {
+                console.log('このリアクションはすでに処理済みです:', reactionKey);
+                return { alreadyProcessed: true };
+              }
+              
+              // ドキュメントが存在しない場合は作成して処理継続
+              transaction.set(docRef, { 
+                processed: true,
+                channel: event.item.channel,
+                timestamp: event.item.ts,
+                reaction: event.reaction,
+                user: event.user,
+                processedAt: new Date()
+              });
+              
+              return { alreadyProcessed: false };
+            });
+            
+            // すでに処理済みの場合は早期リターン
+            if (result.alreadyProcessed) {
+              return;
+            }
+            console.log('Firestoreトランザクション完了: 処理継続');
+          } else {
+            // 読み取り専用モードの場合は重複チェックのみ実行
+            const firestoreDoc = await processedReactionsCollection.doc(reactionKey).get();
+            if (firestoreDoc.exists) {
+              console.log('このリアクションはすでに処理済みです (読み取り専用モード):', reactionKey);
+              return;
+            }
+            console.log('⚠️ 読み取り専用モード: 重複チェックのみ実行、書き込みはスキップします');
+          }
+        } catch (firestoreError) {
+          console.error('Firestore操作でエラー:', firestoreError);
+          // エラーがあっても処理を続行（ただし重複処理のリスクあり）
+          console.log('Firestoreエラーを無視して処理を続行します');
+        }
+
+        // メッセージを取得
+        const result = await client.conversations.history({
+          channel: event.item.channel,
+          latest: event.item.ts,
+          inclusive: true,
+          limit: 1
+        });
+
+        const message = result.messages[0];
+
+        if (message && message.text) {
+          // 砂時計リアクションを追加して処理中であることを示す
+          await client.reactions.add({
+            channel: event.item.channel,
+            timestamp: event.item.ts,
+            name: 'hourglass_flowing_sand'
+          });
+
+          // Slackの投稿URLを生成
+          const teamId = process.env.SLACK_TEAM_ID || '';
+          const messageUrl = `https://${teamId || 'app'}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
+          
+          // オリジナルメッセージテキストを保持
+          const originalMessageText = message.text;
+          
+          try {
+            // 処理時間を測定開始
+            const extractionStartTime = Date.now();
+            
+            // Gemini APIを使用して日付と時間の情報を抽出
+            const events = await extractEventsFromText(originalMessageText);
+            
+            console.log(`イベント抽出完了: ${events.length}件 (所要時間: ${Date.now() - extractionStartTime}ms)`);
+
+            // 砂時計リアクションを削除
+            await client.reactions.remove({
+              channel: event.item.channel,
+              timestamp: event.item.ts,
+              name: 'hourglass_flowing_sand'
+            });
+
+            if (events.length > 0) {
+              // イベントの数を制限（多すぎる場合は警告表示）
+              const MAX_EVENTS = 5;
+              let processEvents = events;
+              if (events.length > MAX_EVENTS) {
+                console.log(`検出されたイベントが多すぎます: ${events.length}件 - 最初の${MAX_EVENTS}件のみ処理します`);
+                processEvents = events.slice(0, MAX_EVENTS);
+                await client.chat.postMessage({
+                  channel: event.item.channel,
+                  thread_ts: event.item.ts,
+                  text: `注意: ${events.length}件の予定が検出されましたが、処理数制限のため最初の${MAX_EVENTS}件のみ処理します。`
+                });
+              }
+            
+              // 要約処理は1回だけ実行し、全イベントで共有（処理時間短縮）
+              let sharedDescription = originalMessageText;
+              if (originalMessageText.length > 100) {
+                try {
+                  const summaryResponse = await summarizeText(originalMessageText);
+                  if (summaryResponse && summaryResponse.trim() !== '') {
+                    sharedDescription = summaryResponse;
+                  }
+                } catch (summaryError) {
+                  console.error('テキスト要約中にエラー:', summaryError);
+                  sharedDescription = originalMessageText.substring(0, 97) + '...';
+                }
+              }
+              
+              // 最終的な説明文にはSlack投稿URLを追加
+              sharedDescription = `${sharedDescription}\n\nSlack投稿: ${messageUrl}`;
+
+              // 各イベントを処理する配列を作成して、Promise.allで並列処理する
+              const processPromises = processEvents.map(async (eventItem) => {
+                try {
+                  // 時間フォーマットを修正
+                  if (eventItem.startTime && !eventItem.startTime.includes(':00')) {
+                    eventItem.startTime = eventItem.startTime + ':00';
+                  }
+
+                  if (eventItem.endTime && !eventItem.endTime.includes(':00')) {
+                    eventItem.endTime = eventItem.endTime + ':00';
+                  }
+
+                  // 共有の説明文を使用
+                  eventItem.description = sharedDescription;
+                  
+                  // Google Calendar URLを生成
+                  const calendarUrl = createGoogleCalendarUrl(eventItem);
+
+                  // スレッドに返信
+                  return client.chat.postMessage({
+                    channel: event.item.channel,
+                    thread_ts: event.item.ts,
+                    text: `予定を検出しました: ${eventItem.title}\n${calendarUrl}`
+                  });
+                } catch (itemError) {
+                  console.error('個別の予定処理でエラー:', itemError);
+                  return client.chat.postMessage({
+                    channel: event.item.channel,
+                    thread_ts: event.item.ts,
+                    text: `この予定の処理中にエラーが発生しました: ${eventItem.title}\nエラー: ${itemError.message}`
+                  });
+                }
+              });
+              
+              // すべてのイベント処理を並列実行して完了を待つ
+              await Promise.all(processPromises);
+            } else {
+              // 予定が見つからなかった場合
+              await client.reactions.add({
+                channel: event.item.channel,
+                timestamp: event.item.ts,
+                name: 'no_entry_sign'
+              });
+
+              await client.chat.postMessage({
+                channel: event.item.channel,
+                thread_ts: event.item.ts,
+                text: '予定情報を検出できませんでした。'
+              });
+            }
+          } catch (apiError) {
+            console.error('APIリクエスト処理エラー:', apiError);
+            await client.chat.postMessage({
+              channel: event.item.channel,
+              thread_ts: event.item.ts,
+              text: `エラーが発生しました: ${apiError.message}`
+            });
+          }
+        }
+      } else {
+        console.log('カレンダー関連のリアクションではありません:', event.reaction);
+      }
+      
+      // 全体の処理時間をログ出力
+      console.log(`イベント処理完了: 所要時間=${Date.now() - processingStartTime}ms`);
+    } catch (error) {
+      console.error('reaction_addedイベント処理中にエラーが発生しました:', error);
+
+      try {
+        if (event && event.item && event.item.channel && event.item.ts) {
+          await client.chat.postMessage({
+            channel: event.item.channel,
+            thread_ts: event.item.ts,
+            text: `エラーが発生しました: ${error.message}`
+          });
+        } else {
+          console.error('イベント情報が不完全です:', event);
+        }
+      } catch (postError) {
+        console.error('エラーメッセージの投稿に失敗しました:', postError);
+      }
+    }
+  });
 
   (async () => {
     try {
