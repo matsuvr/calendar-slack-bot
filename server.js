@@ -359,11 +359,28 @@ if (DEMO_MODE) {
                     eventItem.endTime = eventItem.endTime + ':00';
                   }
 
-                  // オリジナルメッセージとSlackの投稿URLを説明に含める
-                  const description = `${originalMessageText}\n\nSlack投稿: ${messageUrl}`;
+                  // 長い説明文を要約する処理を追加
+                  let finalDescription = originalMessageText;
+                  // 説明が100文字を超える場合は要約
+                  if (originalMessageText.length > 100) {
+                    try {
+                      // Gemini APIを使用して要約
+                      const summaryResponse = await summarizeText(originalMessageText);
+                      if (summaryResponse && summaryResponse.trim() !== '') {
+                        finalDescription = summaryResponse;
+                      }
+                    } catch (summaryError) {
+                      console.error('テキスト要約中にエラー:', summaryError);
+                      // 要約に失敗した場合は、単純に切り詰める
+                      finalDescription = originalMessageText.substring(0, 97) + '...';
+                    }
+                  }
+
+                  // Slack投稿URLは常に含める (これは100文字制限とは別カウント)
+                  finalDescription = `${finalDescription}\n\nSlack投稿: ${messageUrl}`;
                   
-                  // descriptionを上書きして元のテキストを使用
-                  eventItem.description = description;
+                  // descriptionを上書きして要約されたテキストを使用
+                  eventItem.description = finalDescription;
                   
                   const calendarUrl = createGoogleCalendarUrl(eventItem);
 
@@ -617,6 +634,36 @@ if (DEMO_MODE) {
     } catch (error) {
       console.error('Gemini API レガシーモード error:', error);
       return [];
+    }
+  }
+
+  /**
+   * テキストを要約する関数
+   * @param {string} text - 要約するテキスト
+   * @returns {string} - 要約されたテキスト
+   */
+  async function summarizeText(text) {
+    try {
+      const prompt = `以下のテキストを100文字以内で要約してください。重要な情報（日時、会議タイトル、ミーティングIDなど）は必ず含めてください。不要な挨拶や冗長な表現は省略してください:\n${text}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: prompt,
+        config: {
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.8,
+            maxOutputTokens: 100
+          }
+        }
+      });
+
+      const summary = response.candidates[0].content.parts[0].text.trim();
+      console.log('要約テキスト生成:', summary);
+      return summary;
+    } catch (error) {
+      console.error('Gemini API要約エラー:', error);
+      throw error;
     }
   }
 
