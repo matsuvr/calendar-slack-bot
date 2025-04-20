@@ -9,6 +9,9 @@ const PORT = parseInt(process.env.PORT) || 8080;
 // デモモードの判定
 const DEMO_MODE = !process.env.SLACK_BOT_TOKEN;
 
+// 処理済みリアクションを追跡するためのセット
+const processedReactions = new Set();
+
 // デバッグ情報の表示
 console.log(`アプリケーション起動プロセスを開始します...`);
 console.log(`設定されたポート: ${PORT}`);
@@ -315,6 +318,15 @@ if (DEMO_MODE) {
 
       if (calendarReactions.includes(event.reaction)) {
         console.log('カレンダー関連のリアクションが検出されました:', event.reaction);
+
+        // 処理済みリアクションをチェック
+        const reactionKey = `${event.item.channel}-${event.item.ts}-${event.reaction}`;
+        if (processedReactions.has(reactionKey)) {
+          console.log('このリアクションはすでに処理済みです:', reactionKey);
+          return;
+        }
+        processedReactions.add(reactionKey);
+
         const result = await client.conversations.history({
           channel: event.item.channel,
           latest: event.item.ts,
