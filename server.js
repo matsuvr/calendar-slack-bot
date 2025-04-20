@@ -8,6 +8,10 @@ const { Firestore } = require('@google-cloud/firestore');
 const firestore = new Firestore();
 const processedReactionsCollection = firestore.collection('processedReactions');
 
+// Firestoreの読み取り専用モードのフラグ（環境変数から設定可能）
+const FIRESTORE_READONLY = process.env.FIRESTORE_READONLY === 'true' || false;
+console.log(`Firestoreモード: ${FIRESTORE_READONLY ? '読み取り専用' : '読み書き可能'}`);
+
 // ポート番号の設定
 const PORT = parseInt(process.env.PORT) || 8080;
 
@@ -324,21 +328,59 @@ if (DEMO_MODE) {
 
         // 処理済みリアクションをチェック
         const reactionKey = `${event.item.channel}-${event.item.ts}-${event.reaction}`;
-        const firestoreDoc = await processedReactionsCollection.doc(reactionKey).get();
-        if (firestoreDoc.exists) {
-          console.log('このリアクションはすでに処理済みです:', reactionKey);
-          return;
+        console.log(`Firestoreでの重複チェック実行: キー=${reactionKey}`);
+        
+        try {
+          const firestoreDoc = await processedReactionsCollection.doc(reactionKey).get();
+          console.log('Firestoreからドキュメント取得結果:', firestoreDoc.exists ? 'ドキュメント存在' : 'ドキュメント未存在');
+          
+          if (firestoreDoc.exists) {
+            console.log('このリアクションはすでに処理済みです:', reactionKey);
+            return;
+          }
+        } catch (firestoreReadError) {
+          console.error('Firestoreの読み取り操作でエラー:', firestoreReadError);
+          // 読み取りに失敗しても処理を続行
         }
 
         // Firestoreに処理済みとして記録
-        await processedReactionsCollection.doc(reactionKey).set({ 
-          processed: true,
-          channel: event.item.channel,
-          timestamp: event.item.ts,
-          reaction: event.reaction,
-          user: event.user,
-          processedAt: new Date()
-        });
+        try {
+          console.log('Firestoreにデータを書き込み開始:', reactionKey);
+          
+          // Firestoreが読み取り専用モードかどうかチェック
+          if (FIRESTORE_READONLY) {
+            console.log('⚠️ Firestoreは読み取り専用モードです。書き込みをスキップします:', reactionKey);
+            console.log('環境変数FIRESTORE_READONLY=trueが設定されているか、または明示的にフラグが有効化されています');
+            // 読み取り専用モードの場合は書き込みをスキップし、正常に続行
+          } else {
+            // 通常モード：Firestoreに書き込み
+            await processedReactionsCollection.doc(reactionKey).set({ 
+              processed: true,
+              channel: event.item.channel,
+              timestamp: event.item.ts,
+              reaction: event.reaction,
+              user: event.user,
+              processedAt: new Date()
+            });
+            console.log('Firestoreへの書き込み成功:', reactionKey);
+          }
+        } catch (firestoreWriteError) {
+          console.error('Firestoreの書き込み操作でエラー:', firestoreWriteError);
+          console.error('エラーコード:', firestoreWriteError.code);
+          console.error('エラーメッセージ:', firestoreWriteError.message);
+          console.error('エラー詳細:', JSON.stringify(firestoreWriteError, null, 2));
+          
+          // 権限エラーの場合、読み取り専用モードを推奨
+          if (firestoreWriteError.code === 7 || 
+              firestoreWriteError.message?.includes('PERMISSION_DENIED') || 
+              firestoreWriteError.message?.includes('Missing or insufficient permissions')) {
+            console.error('⚠️ Firestoreへの書き込み権限がありません。環境変数FIRESTORE_READONLY=trueを設定することで、');
+            console.error('読み取り専用モードで動作します（重複リアクション処理のリスクはありますが、機能は動作します）');
+          }
+          
+          // Firestoreエラーがあっても処理を続行（重複処理のリスクはあるが機能は動作させる）
+          console.log('Firestoreエラーを無視して処理を続行します');
+        }
 
         const result = await client.conversations.history({
           channel: event.item.channel,
