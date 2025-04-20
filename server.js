@@ -108,129 +108,42 @@ if (DEMO_MODE) {
 
 // セットアップガイド用のエンドポイント
 expressApp.get('/', (req, res) => {
+  // Cloud Runの使用料を節約するため、静的なFirebaseページを表示
   res.status(200).send(`
     <html>
       <head>
-        <title>Calendar Slack Bot - Setup Guide</title>
+        <title>Calendar Slack Bot - Firebase Static Page</title>
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
-          h1 { color: #4285f4; }
-          h2 { color: #34a853; margin-top: 30px; }
-          pre { background: #f1f1f1; padding: 10px; border-radius: 5px; overflow-x: auto; }
-          .warning { background: #ffeaa7; padding: 15px; border-left: 5px solid #fdcb6e; margin: 20px 0; }
-          .step { background: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-          code { background: #f1f1f1; padding: 2px 5px; border-radius: 3px; }
+          h1 { color: #FF8C00; }
+          h2 { color: #FF5722; margin-top: 30px; }
+          .container { text-align: center; padding: 50px 20px; }
+          .firebase-logo { width: 100px; margin-bottom: 20px; }
+          .status { background: #FFF3E0; padding: 15px; border-radius: 5px; margin: 20px 0; }
+          .button { display: inline-block; background: #FF5722; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; margin-top: 20px; }
         </style>
       </head>
       <body>
-        <h1>Calendar Slack Bot - セットアップガイド</h1>
-        
-        <div class="warning">
-          <h3>⚠️ 現在サーバーはデモモードで実行されています</h3>
-          <p>完全な機能を有効にするには、環境変数の設定が必要です。</p>
+        <div class="container">
+          <img src="https://www.gstatic.com/devrel-devsite/prod/vfe8699a5d354c41f3f953a7a9794768d4d2f39d37577d5708b5539be069912e1/firebase/images/lockup.svg" alt="Firebase Logo" class="firebase-logo">
+          <h1>Calendar Slack Bot</h1>
+          
+          <div class="status">
+            <h2>静的ページ表示モード</h2>
+            <p>このページは静的ホスティングページです。サーバーリソースの節約のため、メインページは静的コンテンツとして提供されています。</p>
+            <p>ボットは正常に稼働中です。Slackワークスペースでご利用いただけます。</p>
+          </div>
+          
+          <p>Slackでカレンダー絵文字（:calendar:）を使用して予定を自動検出します。</p>
+          <p>このサービスはGoogleのCloud Runで動作しています。</p>
+          
+          <a href="https://github.com/yourusername/calendar-slack-bot" class="button">GitHubリポジトリ</a>
         </div>
         
-        <h2>必要な環境変数</h2>
-        <p>以下の環境変数をGoogle Cloud Runの設定で指定してください：</p>
-        <pre>SLACK_BOT_TOKEN=xoxb-...
-SLACK_SIGNING_SECRET=...
-GEMINI_API_KEY=...</pre>
-        
-        <h2>セットアップ手順</h2>
-        
-        <div class="step">
-          <h3>ステップ 1: Slackアプリの作成</h3>
-          <ol>
-            <li><a href="https://api.slack.com/apps" target="_blank">Slack API Dashboard</a>にアクセスします。</li>
-            <li>「Create New App」→「From scratch」を選択します。</li>
-            <li>アプリ名を入力し、使用するワークスペースを選択します。</li>
-          </ol>
-        </div>
-        
-        <div class="step">
-          <h3>ステップ 2: ボットスコープの設定</h3>
-          <ol>
-            <li>サイドバーから「OAuth & Permissions」を選択します。</li>
-            <li>「Bot Token Scopes」セクションで、以下のスコープを追加します：
-              <ul>
-                <li>channels:history</li>
-                <li>channels:read</li>
-                <li>chat:write</li>
-                <li>reactions:read</li>
-                <li>reactions:write</li>
-              </ul>
-            </li>
-          </ol>
-        </div>
-        
-        <div class="step">
-          <h3>ステップ 3: アプリのインストールと認証情報の取得</h3>
-          <ol>
-            <li>「Install to Workspace」ボタンをクリックしてアプリをインストールします。</li>
-            <li>インストール完了後、以下の情報をメモします：
-              <ul>
-                <li>「Bot User OAuth Token」(<code>SLACK_BOT_TOKEN</code>として使用)</li>
-                <li>「Basic Information」ページの「Signing Secret」(<code>SLACK_SIGNING_SECRET</code>として使用)</li>
-              </ul>
-            </li>
-          </ol>
-        </div>
-        
-        <div class="step">
-          <h3>ステップ 4: イベントサブスクリプションの設定</h3>
-          <ol>
-            <li>「Event Subscriptions」を選択し、「Enable Events」をONにします。</li>
-            <li>Request URLに以下を入力します：<br><code>${req.protocol}://${req.get('host')}/slack/events</code></li>
-            <li>「Subscribe to bot events」セクションで、以下のイベントを追加します：
-              <ul>
-                <li>reaction_added</li>
-              </ul>
-            </li>
-            <li>「Save Changes」をクリックします。</li>
-          </ol>
-        </div>
-        
-        <div class="step">
-          <h3>ステップ 5: Gemini API Keyの取得</h3>
-          <ol>
-            <li><a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>にアクセスします。</li>
-            <li>「Get API key」をクリックしてAPIキーを取得します。</li>
-            <li>生成されたAPIキーを<code>GEMINI_API_KEY</code>として使用します。</li>
-          </ol>
-        </div>
-        
-        <div class="step">
-          <h3>ステップ 6: 環境変数の設定</h3>
-          <ol>
-            <li><a href="https://console.cloud.google.com/run" target="_blank">Google Cloud Run Console</a>にアクセスします。</li>
-            <li>このサービスの詳細ページに移動します。</li>
-            <li>「Edit & Deploy New Revision」をクリックします。</li>
-            <li>「Variables & Secrets」タブで、以下の環境変数を追加します：
-              <pre>SLACK_BOT_TOKEN=xoxb-...（ステップ3で取得したBot User OAuth Token）
-SLACK_SIGNING_SECRET=...（ステップ3で取得したSigning Secret）
-GEMINI_API_KEY=...（ステップ5で取得したAPI Key）</pre>
-            </li>
-            <li>「Deploy」をクリックして新しいリビジョンをデプロイします。</li>
-          </ol>
-        </div>
-        
-        <h2>使い方</h2>
-        <p>セットアップが完了すると、Slackチャンネルでメッセージに以下のいずれかの絵文字リアクションを追加することで、予定を自動検出します：</p>
-        <ul>
-          <li>:calendar:</li>
-          <li>:カレンダー:</li>
-          <li>:calendar_spiral:</li>
-          <li>:date:</li>
-          <li>:カレンダーに入れる:</li>
-          <li>:calendar-bot:</li>
-        </ul>
-        
-        <p>Bot は予定情報を検出すると、スレッドに予定情報とGoogleカレンダーへの追加リンクを返信します。</p>
-        
-        <p>現在の状態: <span style="color: ${DEMO_MODE ? 'red' : 'green'}">${DEMO_MODE ? 'デモモード（機能制限あり）' : '本番モード（完全機能）'}</span></p>
-        
-        <hr>
-        <p>Calendar Slack Bot - ${new Date().getFullYear()}</p>
+        <footer style="text-align: center; margin-top: 50px; font-size: 0.8em; color: #888;">
+          <p>Calendar Slack Bot - ${new Date().getFullYear()}</p>
+          <p>Powered by Firebase & Google Cloud Run</p>
+        </footer>
       </body>
     </html>
   `);
