@@ -13,6 +13,9 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 │   Slack API  │◄───►│ Calendar Bot │◄───►│   Gemini API  │
 └─────────────┘     └──────────────┘     └───────────────┘
                            │
+                           ├────────────►┌───────────────┐
+                           │             │   Firestore   │
+                           │             └───────────────┘
                            ▼
                     ┌──────────────┐
                     │Google Calendar│
@@ -24,8 +27,8 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 
 ### 3.1. Slackイベント受信
 
-**エンドポイント**: `/slack/events`
-**メソッド**: POST
+**エンドポイント**: `/slack/events`  
+**メソッド**: POST  
 **コンテンツタイプ**: application/json
 
 このエンドポイントはSlack APIからのイベント通知を受け取ります。Slack APIからのリクエストは署名が検証され、正当なものだけが処理されます。
@@ -56,7 +59,7 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 
 ### 3.2. ヘルスチェック
 
-**エンドポイント**: `/health`
+**エンドポイント**: `/health`  
 **メソッド**: GET
 
 システムの状態を確認するためのエンドポイントです。
@@ -69,21 +72,25 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 
 ### 3.3. セットアップガイド
 
-**エンドポイント**: `/`
+**エンドポイント**: `/`  
 **メソッド**: GET
 
-セットアップガイドを表示するHTMLページを返します。
+セットアップガイドを表示するHTMLページを返します。デプロイしたCloud Runではリソース節約のため静的なHTMLを返します。
 
 ## 4. 内部関数API
 
-### 4.1. 予定情報抽出 API
+### 4.1. AI処理サービス (`src/services/aiService.js`)
 
-#### `extractEventsFromText(text)`
+#### `extractEventsFromText(text, options)`
 
 テキストから予定情報を抽出します。
 
 **引数**:
 - `text` (string): 分析するテキスト
+- `options` (object): 抽出オプション
+  - `currentDate` (string): 現在の日付（YYYY-MM-DD形式）
+  - `currentTime` (string): 現在の時刻（HH:MM形式）
+  - `maxEvents` (number): 抽出する最大予定数
 
 **戻り値**:
 予定オブジェクトの配列。各オブジェクトは以下のプロパティを持ちます:
@@ -99,19 +106,18 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 2. 予定情報をJSON形式で構造化
 3. 失敗した場合はレガシーモードで再試行
 
-### 4.2. テキスト要約 API
+#### `summarizeText(text, maxLength = 100)`
 
-#### `summarizeText(text)`
-
-長いテキストを100文字以内に要約します。
+長いテキストを指定された文字数以内に要約します。
 
 **引数**:
 - `text` (string): 要約するテキスト
+- `maxLength` (number): 最大文字数（デフォルト: 100）
 
 **戻り値**:
 - 要約されたテキスト（string）
 
-### 4.3. Googleカレンダーリンク生成 API
+### 4.2. カレンダーユーティリティ (`src/utils/calendarUtils.js`)
 
 #### `createGoogleCalendarUrl(event)`
 
@@ -128,7 +134,29 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 - 場所 (`location`)
 - 説明 (`details`)
 - 日時 (`dates` - ISO 8601形式)
-- ビデオ会議リンク（Zoom、Google Meetを自動検出）
+- ビデオ会議リンク（Zoom、Google Meet、Microsoft Teamsを自動検出）
+
+#### `detectMeetingUrls(text)`
+
+テキスト内のオンラインミーティングURLを検出します。
+
+**引数**:
+- `text` (string): 検索するテキスト
+
+**戻り値**:
+- 検出されたミーティングURLの配列
+
+### 4.3. Firestoreサービス (`src/services/firestoreService.js`)
+
+#### `checkAndStoreReactionId(reactionId)`
+
+リアクションIDを検証し、処理済みでなければFirestoreに保存します。
+
+**引数**:
+- `reactionId` (string): チェックするリアクションID
+
+**戻り値**:
+- `{ exists: boolean }`: リアクションが既に処理済みかどうか
 
 ## 5. デプロイメント設定
 
@@ -139,15 +167,18 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 | `SLACK_BOT_TOKEN` | Slackボットのトークン | ✓ |
 | `SLACK_SIGNING_SECRET` | Slackアプリの署名シークレット | ✓ |
 | `GEMINI_API_KEY` | Gemini APIキー | ✓ |
+| `FIRESTORE_PROJECT_ID` | FirestoreプロジェクトID |  |
 | `PORT` | サーバーポート番号（デフォルト: 8080） |  |
 | `SLACK_TEAM_ID` | SlackチームID（オプション） |  |
+| `NODE_ENV` | 実行環境（production/development） |  |
 
 ### 5.2. Cloud Run設定
 
-**CPU**: 1
-**メモリ**: 512Mi
-**最大インスタンス数**: 10
-**タイムアウト**: 300秒
+**CPU**: 1  
+**メモリ**: 512Mi  
+**最大インスタンス数**: 10  
+**タイムアウト**: 300秒  
+**コンテナ環境**: Node.js 20
 
 ## 6. エラーレスポンス
 
@@ -155,7 +186,7 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 
 Slackスレッドに対して以下のレスポンスを返します:
 ```
-予定情報を検出できませんでした。
+予定情報を検出できませんでした。メッセージに日時情報が含まれていることを確認してください。
 ```
 また、元のメッセージに `no_entry_sign` リアクションを追加します。
 
@@ -164,6 +195,14 @@ Slackスレッドに対して以下のレスポンスを返します:
 Slackスレッドに対して以下のレスポンスを返します:
 ```
 エラーが発生しました: [エラーメッセージ]
+技術サポートチームにお問い合わせください。
+```
+
+### 6.3. 複数予定検出時の上限超過
+
+予定数が上限を超えた場合:
+```
+多数の予定が検出されました。最大5件までが処理されます。
 ```
 
 ## 7. リアクショントリガー
@@ -183,3 +222,5 @@ Slackスレッドに対して以下のレスポンスを返します:
 - サーバーはHTTPSのみを使用
 - APIキーは環境変数を通じて安全に管理
 - 予定の説明文を要約する際も重要情報（URL、ミーティングID）は保持
+- Firestoreトランザクションによる重複処理防止
+- 環境変数を使用した認証情報の分離
