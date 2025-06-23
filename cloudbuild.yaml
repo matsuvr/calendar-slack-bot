@@ -6,8 +6,7 @@ steps:
   # コンテナイメージをContainer Registryにプッシュ
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/calendar-slack-bot']
-  
-  # コンテナイメージをCloud Runにデプロイ
+    # コンテナイメージをCloud Runにデプロイ（🚀 高速化設定）
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -18,6 +17,15 @@ steps:
       - '--region=us-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
+      # 🚀 高速化: リソース設定
+      - '--memory=1Gi'
+      - '--cpu=2'
+      - '--concurrency=100'
+      - '--max-instances=10'
+      # 🚀 高速化: タイムアウト設定
+      - '--timeout=300'
+      # 🚀 高速化: コールドスタート軽減（有料機能だが参考として）
+      # - '--min-instances=1'  # 1つのインスタンスを常時起動（無料枠では使用不可）
 
 # Cloud Loggingを使用してエラーを解決
 options:

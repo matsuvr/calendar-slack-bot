@@ -5,6 +5,38 @@
 const { GoogleGenAI } = require('@google/genai');
 const { config } = require('../config/config');
 
+// 🚀 高速化: キャッシュ機能を追加
+const responseCache = new Map();
+const CACHE_TTL = 1800000; // 30分間キャッシュ
+const MAX_CACHE_SIZE = 500;
+
+/**
+ * キャッシュのクリーンアップ
+ */
+function cleanupAICache() {
+  const now = Date.now();
+  let deleted = 0;
+  
+  for (const [key, value] of responseCache.entries()) {
+    if (now - value.timestamp > CACHE_TTL) {
+      responseCache.delete(key);
+      deleted++;
+    }
+  }
+  
+  if (responseCache.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(responseCache.entries());
+    entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toDelete = entries.slice(0, responseCache.size - MAX_CACHE_SIZE);
+    toDelete.forEach(([key]) => responseCache.delete(key));
+    deleted += toDelete.length;
+  }
+  
+  if (deleted > 0) {
+    console.log(`🗑️ AIキャッシュクリーンアップ: ${deleted}件削除`);
+  }
+}
+
 // Gemini APIクライアントの初期化
 let ai;
 try {
@@ -20,14 +52,25 @@ try {
  * @returns {Promise<string>} - 要約されたテキスト
  */
 async function summarizeText(text) {
+  const startTime = Date.now();
+  
   try {
     if (text.length <= 100) {
       return text;
     }
     
+    // 🚀 高速化: キャッシュチェック
+    const cacheKey = `summary:${text.substring(0, 100)}`;
+    const cached = responseCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log(`⚡ 要約キャッシュヒット (${Date.now() - startTime}ms)`);
+      return cached.data;
+    }
+    
     const prompt = `以下のテキストを100文字以内で要約してください:\n${text}`;
 
-    const response = await ai.models.generateContent({
+    // 🚀 高速化: タイムアウト付きAPI呼び出し
+    const apiPromise = ai.models.generateContent({
       model: config.gemini.models.summarize,
       contents: prompt,
       config: {
@@ -39,10 +82,20 @@ async function summarizeText(text) {
       }
     });
 
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000)
+    );
+
+    const response = await Promise.race([apiPromise, timeoutPromise]);
     const summary = response.candidates[0].content.parts[0].text.trim();
+    
+    // 🚀 キャッシュに保存
+    responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
+    
+    console.log(`⏱️ AI要約完了: ${Date.now() - startTime}ms`);
     return summary;
   } catch (error) {
-    console.error('テキスト要約中にエラーが発生しました:', error);
+    console.error(`❌ 要約エラー (${Date.now() - startTime}ms):`, error.message);
     return text.substring(0, 97) + '...';
   }
 }
@@ -53,6 +106,8 @@ async function summarizeText(text) {
  * @returns {Promise<Array>} - 抽出された予定情報の配列
  */
 async function extractEventsFromText(text) {
+  const startTime = Date.now();
+  
   try {
     const now = new Date();
     const currentDate = now.toISOString().split('T')[0];
@@ -60,6 +115,14 @@ async function extractEventsFromText(text) {
 
     if (text.length < 10) {
       return [];
+    }
+
+    // 🚀 高速化: キャッシュチェック
+    const cacheKey = `events:${text.substring(0, 200)}`;
+    const cached = responseCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log(`⚡ 予定抽出キャッシュヒット (${Date.now() - startTime}ms)`);
+      return cached.data;
     }
 
     const systemPrompt = `
@@ -71,9 +134,7 @@ async function extractEventsFromText(text) {
       現在の日時は ${currentDate} ${currentTime} であることを考慮してください。
     `;
 
-    const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;
-
-    const responseSchema = {
+    const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;    const responseSchema = {
       type: "array",
       items: {
         type: "object",
@@ -109,7 +170,8 @@ async function extractEventsFromText(text) {
       }
     };
 
-    const response = await ai.models.generateContent({
+    // 🚀 高速化: タイムアウト付きAPI呼び出し
+    const apiPromise = ai.models.generateContent({
       model: config.gemini.models.extract,
       contents: [
         {
@@ -130,19 +192,36 @@ async function extractEventsFromText(text) {
       }
     });
 
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000)
+    );
+
+    const response = await Promise.race([apiPromise, timeoutPromise]);
     const jsonResponse = response.candidates[0].content.parts[0].text;
 
     try {
       const parsedEvents = JSON.parse(jsonResponse);
       if (Array.isArray(parsedEvents)) {
+        // 🚀 キャッシュに保存
+        responseCache.set(cacheKey, { data: parsedEvents, timestamp: Date.now() });
+        
+        // 定期的なキャッシュクリーンアップ
+        if (Math.random() < 0.1) {
+          setImmediate(cleanupAICache);
+        }
+        
+        console.log(`⏱️ AI予定抽出完了: ${Date.now() - startTime}ms, ${parsedEvents.length}件`);
         return parsedEvents;
       } else {
+        console.warn('AI応答が配列ではありません、レガシーモードで再試行');
         return await extractEventsLegacy(text);
       }
     } catch (parseError) {
+      console.warn('AI応答のJSON解析に失敗、レガシーモードで再試行:', parseError.message);
       return await extractEventsLegacy(text);
     }
   } catch (error) {
+    console.error(`❌ AI予定抽出エラー (${Date.now() - startTime}ms):`, error.message);
     return await extractEventsLegacy(text);
   }
 }
