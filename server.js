@@ -64,24 +64,21 @@ expressApp.get('/', (req, res) => {
   res.status(200).send(`
     <html>
       <head>
-        <title>Calendar Slack Bot - Firebase Static Page</title>
-        <style>
+        <title>Calendar Slack Bot - Firebase Static Page</title>        <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
-          h1 { color: #FF8C00; }
-          h2 { color: #FF5722; margin-top: 30px; }
+          h1 { color: #333; font-size: 1.8em; margin-bottom: 10px; }
+          h2 { color: #FF8C00; margin-top: 10px; font-size: 1.5em; }
+          h3 { color: #FF5722; margin-top: 30px; }
           .container { text-align: center; padding: 50px 20px; }
-          .firebase-logo { width: 100px; margin-bottom: 20px; }
           .status { background: #FFF3E0; padding: 15px; border-radius: 5px; margin: 20px 0; }
           .button { display: inline-block; background: #FF5722; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; margin-top: 20px; }
         </style>
-      </head>
-      <body>
+      </head>      <body>
         <div class="container">
-          <img src="https://www.gstatic.com/devrel-devsite/prod/vfe8699a5d354c41f3f953a7a9794768d4d2f39d37577d5708b5539be069912e1/firebase/images/lockup.svg" alt="Firebase Logo" class="firebase-logo">
-          <h1>Calendar Slack Bot</h1>
-          
-          <div class="status">
-            <h2>静的ページ表示モード</h2>
+          <h1>Slackに書き込まれた予定をカレンダーに登録しようとするBot</h1>
+          <h2 style="color: #FF8C00; margin-top: 10px;">Calendar Slack Bot</h2>
+            <div class="status">
+            <h3>静的ページ表示モード</h3>
             <p>このページは静的ホスティングページです。サーバーリソースの節約のため、メインページは静的コンテンツとして提供されています。</p>
             <p>ボットは正常に稼働中です。Slackワークスペースでご利用いただけます。</p>
           </div>
