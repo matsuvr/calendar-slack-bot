@@ -19,13 +19,13 @@ if (config.app.demoMode) {
   // デモモードではシンプルなExpressアプリのみを使用
   console.log('⚠️ デモモードで起動します（SLACK_BOT_TOKENが設定されていません）');
   expressApp = express();
-} else {
-  // 本番モードではSlack Boltと統合したExpressを使用
+} else {  // 本番モードではSlack Boltと統合したExpressを使用
   try {
     expressReceiver = new ExpressReceiver({
       signingSecret: config.slack.signingSecret || 'dummy-secret-for-startup',
       endpoints: '/slack/events', // Slack APIのRequest URLに合わせる
-      processBeforeResponse: config.slack.processBeforeResponse, // Slackへの応答を優先するためfalseに変更
+      processBeforeResponse: config.slack.processBeforeResponse,
+      ignoreSelf: false, // 自分のメッセージも処理対象とする
     });
     expressApp = expressReceiver.app;
   } catch (receiverInitError) {
@@ -126,10 +126,34 @@ if (config.app.demoMode) {
       token: config.slack.botToken,
       receiver: expressReceiver,
       processBeforeResponse: config.slack.processBeforeResponse,
+    });    // リアクション追加イベントのハンドラー登録
+    app.event('reaction_added', async ({ event, client, ack }) => {
+      // Slackに即座に応答
+      await ack();
+      
+      console.log('🔄 reaction_added イベントを受信:', {
+        reaction: event.reaction,
+        user: event.user,
+        channel: event.item?.channel,
+        timestamp: event.item?.ts,
+        item_type: event.item?.type
+      });
+      
+      // バックグラウンドで処理を実行
+      setImmediate(async () => {
+        try {
+          await handleCalendarReaction({ event, client });
+        } catch (error) {
+          console.error('ハンドラー実行エラー:', error);
+        }
+      });
     });
-    
-    // リアクション追加イベントのハンドラー登録
-    app.event('reaction_added', handleCalendarReaction);
+
+    // 他のイベントも監視してデバッグ
+    app.event(/.*/, async ({ event, ack }) => {
+      await ack();
+      console.log('📥 受信したイベント:', event.type);
+    });
     
     // アプリを起動
     (async () => {

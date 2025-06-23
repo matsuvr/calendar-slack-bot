@@ -14,17 +14,42 @@ const { createGoogleCalendarUrl, normalizeEventData } = require('../utils/calend
  */
 async function handleCalendarReaction({ event, client }) {
   try {
+    console.log('🎯 リアクションイベントを受信:', {
+      reaction: event.reaction,
+      user: event.user,
+      channel: event.item.channel,
+      timestamp: event.item.ts,
+      eventType: event.type
+    });
+
     if (!config.calendarReactions.includes(event.reaction)) {
+      console.log('❌ カレンダー関連の絵文字ではありません:', event.reaction);
+      console.log('📋 設定されているカレンダーリアクション:', config.calendarReactions);
       return; // カレンダー関連の絵文字でない場合は処理しない
     }
 
-    // すでに処理済みのリアクションかチェック
+    console.log('✅ カレンダーリアクションを検出:', event.reaction);
+
+    // アイテムタイプの確認
+    console.log('📋 リアクション対象のアイテム情報:', {
+      type: event.item.type,
+      channel: event.item.channel,
+      ts: event.item.ts
+    });
+
+    if (event.item.type !== 'message') {
+      console.log('❌ メッセージ以外のアイテムに対するリアクションです:', event.item.type);
+      return; // メッセージ以外のアイテムの場合は処理しない
+    }    // すでに処理済みのリアクションかチェック
+    console.log('🔍 重複チェックを実行中...');
     const shouldContinue = await checkAndMarkReactionAsProcessed(
       event.item.channel, 
       event.item.ts, 
       event.reaction, 
       event.user
     );
+    
+    console.log('🔍 重複チェック結果:', shouldContinue ? '処理続行' : '処理済みのためスキップ');
     
     if (!shouldContinue) {
       return; // すでに処理済みの場合は終了
