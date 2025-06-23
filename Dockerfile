@@ -26,8 +26,6 @@ ENV NODE_ENV=production
 # デバッグ情報用の簡易スクリプトを作成
 RUN echo '#!/bin/bash' > /usr/local/bin/entrypoint.sh && \
     echo 'echo "コンテナ起動: ポート=$PORT"' >> /usr/local/bin/entrypoint.sh && \
-    echo 'echo "Node.jsバージョン: $(node -v)"' >> /usr/local/bin/entrypoint.sh && \
-    echo 'echo "フォルダ内容: $(ls -la)"' >> /usr/local/bin/entrypoint.sh && \
     echo 'exec "$@"' >> /usr/local/bin/entrypoint.sh && \
     chmod +x /usr/local/bin/entrypoint.sh
 
