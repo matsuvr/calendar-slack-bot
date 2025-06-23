@@ -94,11 +94,11 @@ async function handleCalendarReaction({ event, client }) {
  */
 async function processAIAndRespond({ client, event, message, messageUrl, startTime }) {
   try {
-    // 🚀 AI処理（タイムアウト: 10秒）
+    // 🚀 AI処理（タイムアウトを30秒に延長）
     const events = await Promise.race([
       extractEventsFromText(message),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('AI処理タイムアウト')), 10000)
+        setTimeout(() => reject(new Error('AI処理タイムアウト（30秒）')), 30000)
       )
     ]);
 
@@ -210,12 +210,30 @@ async function removeProcessingReaction(client, channel, timestamp) {
  */
 async function handleError(client, event, error) {
   try {
+    let userMessage = 'エラーが発生しました';
+    
+    // エラーの種類に応じてユーザーフレンドリーなメッセージを設定
+    if (error.message.includes('タイムアウト')) {
+      userMessage = '⏰ 処理がタイムアウトしました。しばらく待ってから再度お試しください。';
+    } else if (error.message.includes('503') || error.message.includes('overloaded') || error.message.includes('UNAVAILABLE')) {
+      userMessage = '🚧 AI サービスが混雑しています。しばらく待ってから再度お試しください。';
+    } else if (error.message.includes('401') || error.message.includes('認証')) {
+      userMessage = '🔐 認証エラーが発生しました。管理者にお問い合わせください。';
+    } else {
+      userMessage = `❌ 処理中にエラーが発生しました: ${error.message}`;
+    }
+
     await Promise.all([
       removeProcessingReaction(client, event.item.channel, event.item.ts),
+      client.reactions.add({
+        channel: event.item.channel,
+        timestamp: event.item.ts,
+        name: 'warning'
+      }).catch(() => {}),
       client.chat.postMessage({
         channel: event.item.channel,
         thread_ts: event.item.ts,
-        text: `エラーが発生しました: ${error.message}`,
+        text: userMessage,
         unfurl_links: false
       })
     ]);

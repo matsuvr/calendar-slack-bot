@@ -76,11 +76,9 @@ async function summarizeText(text) {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000);
-    });
-
-    try {
+    });    try {
       const response = await Promise.race([
-        ai.models.generateContent({
+        callGeminiWithRetry({
           model: config.gemini.models.summarize,
           contents: prompt,
           config: {
@@ -188,10 +186,8 @@ async function extractEventsFromText(text) {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000);
-    });
-
-    const response = await Promise.race([
-      ai.models.generateContent({
+    });    const response = await Promise.race([
+      callGeminiWithRetry({
         model: config.gemini.models.extract,
         contents: [
           { text: systemPrompt },
@@ -265,8 +261,7 @@ async function extractEventsLegacy(text) {
       - 説明（オンラインミーティングのURLや詳細情報を含む）(description)
       
       JSONの配列形式のみで返してください。余分なテキストは含めないでください。
-      予定が見つからない場合は空の配列[]を返してください。
-    `;    const response = await ai.models.generateContent({
+      予定が見つからない場合は空の配列[]を返してください。    `;    const response = await callGeminiWithRetry({
       model: config.gemini.models.extract,
       contents: `${prompt}\n\nテキスト: ${text}`,
       config: {
@@ -306,6 +301,45 @@ async function extractEventsLegacy(text) {
     console.error('レガシーモードでのAI処理エラー:', error);
     return [];
   }
+}
+
+/**
+ * Gemini APIのリトライ機能付き呼び出し
+ * @param {Object} requestConfig - API呼び出し設定
+ * @param {number} maxRetries - 最大リトライ回数
+ * @returns {Promise} - API応答
+ */
+async function callGeminiWithRetry(requestConfig, maxRetries = 3) {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🤖 Gemini API呼び出し (試行 ${attempt}/${maxRetries})`);
+      
+      const response = await ai.models.generateContent(requestConfig);
+      console.log(`✅ Gemini API呼び出し成功 (試行 ${attempt})`);
+      return response;
+      
+    } catch (error) {
+      lastError = error;
+      console.warn(`⚠️ Gemini API呼び出し失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
+      
+      // 503エラー（サービス過負荷）の場合は指数バックオフでリトライ
+      if (error.message.includes('503') || error.message.includes('overloaded') || error.message.includes('UNAVAILABLE')) {
+        if (attempt < maxRetries) {
+          const waitTime = Math.pow(2, attempt) * 1000; // 2秒、4秒、8秒...
+          console.log(`🔄 ${waitTime}ms待機後にリトライします...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+      } else {
+        // 503以外のエラーはすぐに失敗とする
+        throw error;
+      }
+    }
+  }
+  
+  throw lastError;
 }
 
 module.exports = {
