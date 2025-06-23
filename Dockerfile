@@ -1,5 +1,8 @@
 # Node.jsイメージを使用（安定版のLTSに更新）
-FROM node:20-slim
+FROM node:20.19.3-slim
+
+# セキュリティアップデートを適用
+RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
 # アプリケーションディレクトリを作成
 WORKDIR /usr/src/app

@@ -28,7 +28,7 @@ const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
     models: {
-      summarize: 'gemini-2.0-flash-lite',
+      summarize: 'gemini-2.0-flash',
       extract: 'gemini-2.0-flash',
     },
   },
