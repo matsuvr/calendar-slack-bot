@@ -1,8 +1,8 @@
 # Node.jsイメージを使用（安定版のLTSに更新）
-FROM node:20.19.3-slim
+FROM node:20-slim
 
-# セキュリティアップデートを適用
-RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+# セキュリティアップデートを適用（Debian/Ubuntu系のパッケージ管理に変更）
+RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # アプリケーションディレクトリを作成
 WORKDIR /usr/src/app
@@ -10,8 +10,8 @@ WORKDIR /usr/src/app
 # package.jsonとpackage-lock.jsonをコピー
 COPY package*.json ./
 
-# 依存関係をインストール（package-lock.jsonの同期問題を解決するためにnpm installを使用）
-RUN npm install --production && npm cache clean --force
+# 依存関係をインストール（プロダクション用の最適化）
+RUN npm ci --omit=dev && npm cache clean --force
 
 # アプリケーションのソースコードをコピー
 COPY . .
