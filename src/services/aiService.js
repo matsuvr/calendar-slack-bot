@@ -37,12 +37,13 @@ function cleanupAICache() {
   }
 }
 
-// Gemini APIクライアントの初期化
+// Gemini APIクライアントの初期化（最新版に修正）
 let ai;
 try {
-  ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
+  ai = new GoogleGenAI({apiKey: config.gemini.apiKey});
+  console.log('✅ Gemini APIクライアント初期化成功');
 } catch (error) {
-  console.error('Gemini APIの初期化に失敗しました:', error);
+  console.error('❌ Gemini APIの初期化に失敗しました:', error);
   throw error;
 }
 
@@ -66,34 +67,46 @@ async function summarizeText(text) {
       console.log(`⚡ 要約キャッシュヒット (${Date.now() - startTime}ms)`);
       return cached.data;
     }
-    
-    const prompt = `以下のテキストを100文字以内で要約してください:\n${text}`;
+      const prompt = `以下のテキストを100文字以内で要約してください:\n${text}`;
 
-    // 🚀 高速化: タイムアウト付きAPI呼び出し
-    const apiPromise = ai.models.generateContent({
-      model: config.gemini.models.summarize,
-      contents: prompt,
-      config: {
-        generationConfig: {
-          temperature: 0.2,
-          topP: 0.8,
-          maxOutputTokens: 100
-        }
-      }
+    // 🚀 修正: 最新のGenAI API呼び出し方法
+    console.log('🤖 Gemini要約API呼び出し開始');
+    
+    // タイムアウト処理を改善
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000);
     });
 
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000)
-    );
-
-    const response = await Promise.race([apiPromise, timeoutPromise]);
-    const summary = response.candidates[0].content.parts[0].text.trim();
-    
-    // 🚀 キャッシュに保存
-    responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
-    
-    console.log(`⏱️ AI要約完了: ${Date.now() - startTime}ms`);
-    return summary;
+    try {
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: config.gemini.models.summarize,
+          contents: prompt,
+          config: {
+            generationConfig: {
+              temperature: 0.2,
+              topP: 0.8,
+              maxOutputTokens: 100
+            }
+          }
+        }),
+        timeoutPromise
+      ]);
+      
+      clearTimeout(timeoutId);
+      const summary = response.text.trim();
+      console.log('✅ Gemini要約完了:', summary.substring(0, 50));
+      
+      // 🚀 キャッシュに保存
+      responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
+      
+      console.log(`⏱️ AI要約完了: ${Date.now() - startTime}ms`);
+      return summary;
+    } catch (innerError) {
+      clearTimeout(timeoutId);
+      throw innerError;
+    }
   } catch (error) {
     console.error(`❌ 要約エラー (${Date.now() - startTime}ms):`, error.message);
     return text.substring(0, 97) + '...';
@@ -168,36 +181,36 @@ async function extractEventsFromText(text) {
         },
         required: ["title"]
       }
-    };
-
-    // 🚀 高速化: タイムアウト付きAPI呼び出し
-    const apiPromise = ai.models.generateContent({
-      model: config.gemini.models.extract,
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: systemPrompt },
-            { text: userPrompt }
-          ]
-        }
-      ],
-      config: {
-        generationConfig: {
-          temperature: 0.2,
-          topP: 0.8,
-          responseMimeType: "application/json",
-          responseSchema: responseSchema
-        }
-      }
+    };    // 🚀 修正: 最新のGenAI API呼び出し方法
+    console.log('🤖 Gemini予定抽出API呼び出し開始');
+    
+    // タイムアウト処理を改善
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000);
     });
 
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000)
-    );
-
-    const response = await Promise.race([apiPromise, timeoutPromise]);
-    const jsonResponse = response.candidates[0].content.parts[0].text;
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: config.gemini.models.extract,
+        contents: [
+          { text: systemPrompt },
+          { text: userPrompt }
+        ],
+        config: {
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.8,
+            responseMimeType: "application/json",
+            responseSchema: responseSchema
+          }
+        }
+      }),
+      timeoutPromise
+    ]);
+    
+    clearTimeout(timeoutId);
+    const jsonResponse = response.text;
 
     try {
       const parsedEvents = JSON.parse(jsonResponse);
@@ -253,9 +266,7 @@ async function extractEventsLegacy(text) {
       
       JSONの配列形式のみで返してください。余分なテキストは含めないでください。
       予定が見つからない場合は空の配列[]を返してください。
-    `;
-
-    const response = await ai.models.generateContent({
+    `;    const response = await ai.models.generateContent({
       model: config.gemini.models.extract,
       contents: `${prompt}\n\nテキスト: ${text}`,
       config: {
@@ -266,8 +277,7 @@ async function extractEventsLegacy(text) {
         }
       }
     });
-
-    const responseText = response.candidates[0].content.parts[0].text;
+    const responseText = response.text;
 
     try {
       let parsedJson;

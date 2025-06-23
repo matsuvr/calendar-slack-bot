@@ -9,6 +9,7 @@ const config = {
   // Firestore設定
   firestore: {
     readonly: process.env.FIRESTORE_READONLY === 'true' || false,
+    timeout: parseInt(process.env.FIRESTORE_TIMEOUT_MS) || 12000, // タイムアウト（ミリ秒）
   },
   
   // サーバー設定
@@ -22,13 +23,12 @@ const config = {
     teamId: process.env.SLACK_TEAM_ID || '',
     processBeforeResponse: false, // イベントでは自動応答のためfalse
   },
-  
-  // Gemini AI設定
+    // Gemini AI設定
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
     models: {
-      summarize: 'gemini-2.0-flash',
-      extract: 'gemini-2.0-flash',
+      summarize: 'gemini-2.0-flash-001',
+      extract: 'gemini-2.0-flash-001',
     },
   },
   

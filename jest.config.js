@@ -40,5 +40,16 @@ module.exports = {
   testTimeout: 10000,
   
   // 詳細表示
-  verbose: true
+  verbose: true,
+  
+  // トランスフォーム設定
+  transform: {
+    '^.+\\.js$': 'babel-jest',
+  },
+    // 非同期操作の処理
+  forceExit: true,
+  detectOpenHandles: true,
+  
+  // テストファイルのタイムアウト設定
+  setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
 };

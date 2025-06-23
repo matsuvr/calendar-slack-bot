@@ -3,7 +3,7 @@
  * モックを使用したTDDの実例
  */
 
-const { describe, test, expect, beforeEach, jest } = require('@jest/globals');
+const { describe, test, expect, beforeEach } = require('@jest/globals');
 const { MockAiService } = require('../mocks/aiService.mock');
 
 // 実際のAIサービスをモックに置き換え

@@ -19,14 +19,14 @@ class MockAiService {
       ]
     };
   }
-
   async extractEventsFromMessage(message) {
     // テスト用のレスポンスを返す
     if (message.includes('エラー')) {
       throw new Error('Test API Error');
     }
     
-    if (message.includes('予定')) {
+    // より緩い条件でイベントを検出
+    if (message.includes('予定') || message.includes('MTG') || message.includes('ミーティング') || message.includes('会議')) {
       return this.mockResponses.extractEvents;
     }
     

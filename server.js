@@ -139,8 +139,8 @@ try {
 // デモモードの場合はここで処理を終了
 if (config.app.demoMode) {
   console.log('デモモードで起動完了。Slack統合機能は無効化されています。');
-} else {
-  // 本番モードの場合のみSlackアプリを初期化
+} else if (process.env.NODE_ENV !== 'test') {
+  // テスト環境でない本番モードの場合のみSlackアプリを初期化
 
   // Slackアプリの初期化
   let app;
@@ -202,4 +202,20 @@ if (config.app.demoMode) {
     console.error('Slackアプリの初期化に失敗しました:', appInitError);
     process.exit(1);
   }
+}
+
+// テスト環境用のエクスポート
+if (process.env.NODE_ENV === 'test') {
+  module.exports = {
+    app: expressApp,
+    server: server,
+    closeServer: () => {
+      if (server) {
+        return new Promise((resolve) => {
+          server.close(resolve);
+        });
+      }
+      return Promise.resolve();
+    }
+  };
 }

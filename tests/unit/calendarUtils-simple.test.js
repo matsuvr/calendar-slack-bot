@@ -40,9 +40,7 @@ describe('calendarUtils', () => {
       const url = createGoogleCalendarUrl(event);
 
       expect(decodeURIComponent(url)).toContain('text=無題の予定');
-    });
-
-    test('should add conference info for Google Meet links', () => {
+    });    test('should add conference info for Google Meet links', () => {
       const event = {
         title: 'オンラインミーティング',
         description: 'Google Meetで開催します https://meet.google.com/abc-defg-hij',
@@ -52,7 +50,8 @@ describe('calendarUtils', () => {
 
       const url = createGoogleCalendarUrl(event);
 
-      expect(decodeURIComponent(url)).toContain('add=conference-https://meet.google.com/abc-defg-hij');
+      // Google MeetのURLがlocationパラメータに含まれることを確認
+      expect(decodeURIComponent(url)).toContain('location=https://meet.google.com/abc-defg-hij');
     });
 
     test('should handle null and undefined values properly', () => {

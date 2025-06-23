@@ -7,7 +7,25 @@ const { config } = require('../config/config');
 
 // 🚀 高速化: Firestore設定を最適化
 const firestore = new Firestore({
-  // 🚀 接続プールとタイムアウトの設定
+  // 🚀 GRPC設定でタイムアウトとリトライを制御
+  gaxOpts: {
+    timeout: config.firestore.timeout, // タイムアウトをミリ秒で設定
+    retry: {
+      retryCodes: [
+        'UNAVAILABLE', // サーバーが利用不可
+        'DEADLINE_EXCEEDED', // タイムアウト
+      ],
+      backoffSettings: {
+        initialRetryDelayMillis: 100, // 初回リトライ遅延
+        retryDelayMultiplier: 1.3, // 遅延乗数
+        maxRetryDelayMillis: 60000, // 最大リトライ遅延
+        initialRpcTimeoutMillis: config.firestore.timeout,
+        rpcTimeoutMultiplier: 1.0,
+        maxRpcTimeoutMillis: config.firestore.timeout,
+        totalTimeoutMillis: config.firestore.timeout * 5, // 全体のタイムアウト
+      },
+    },
+  },
   settings: {
     ignoreUndefinedProperties: true,
   },
@@ -99,41 +117,50 @@ async function checkAndMarkReactionAsProcessed(channelId, timestamp, reaction, u
         
         // 🚀 キャッシュに追加
         recentProcessedCache.set(reactionKey, { timestamp: Date.now() });
+        
         return { alreadyProcessed: false };
+      }, {
+        // トランザクションの最大試行回数
+        maxAttempts: 3,
       });
 
-      // 🚀 高速化: 5秒でタイムアウト
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Firestore操作タイムアウト (5秒)')), 5000)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firestoreトランザクションがタイムアウトしました')), config.firestore.timeout)
       );
 
+      // Promise.raceでタイムアウトを実装
       const result = await Promise.race([transactionPromise, timeoutPromise]);
-      
-      // 定期的なキャッシュクリーンアップ
-      if (Math.random() < 0.1) { // 10%の確率で実行
-        setImmediate(cleanupCache);
+
+      if (result.alreadyProcessed) {
+        return false;
       }
       
-      return !result.alreadyProcessed;
     } else {
-      // 🚀 高速化: 読み取り専用モードもタイムアウト付き
+      // 読み取り専用モードのチェック
       console.log('📖 読み取り専用モードでチェック:', reactionKey);
       
+      let timeoutId;
       const readPromise = processedReactionsCollection.doc(reactionKey).get();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Firestore読み取りタイムアウト (3秒)')), 3000)
-      );
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Firestore読み取りタイムアウト (3秒)')), 3000);
+      });
 
-      const firestoreDoc = await Promise.race([readPromise, timeoutPromise]);
-      
-      console.log(`📄 読み取り専用結果: ${firestoreDoc.exists} (${Date.now() - startTime}ms)`);
-      
-      if (firestoreDoc.exists) {
-        // 🚀 キャッシュに追加
-        recentProcessedCache.set(reactionKey, { timestamp: Date.now() });
+      try {
+        const firestoreDoc = await Promise.race([readPromise, timeoutPromise]);
+        clearTimeout(timeoutId);
+        
+        console.log(`📄 読み取り専用結果: ${firestoreDoc.exists} (${Date.now() - startTime}ms)`);
+        
+        if (firestoreDoc.exists) {
+          // 🚀 キャッシュに追加
+          recentProcessedCache.set(reactionKey, { timestamp: Date.now() });
+        }
+        
+        return !firestoreDoc.exists;
+      } catch (readError) {
+        clearTimeout(timeoutId);
+        throw readError;
       }
-      
-      return !firestoreDoc.exists;
     }
   } catch (error) {
     console.error(`🚨 Firestore操作エラー (${Date.now() - startTime}ms):`, error.message);
