@@ -15,12 +15,12 @@ const config = {
   server: {
     port: parseInt(process.env.PORT) || 8080,
   },
-    // Slack設定
+  // Slack設定
   slack: {
     botToken: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
     teamId: process.env.SLACK_TEAM_ID || '',
-    processBeforeResponse: true, // 3秒以内の応答を保証
+    processBeforeResponse: false, // イベントでは自動応答のためfalse
   },
   
   // Gemini AI設定

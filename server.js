@@ -20,12 +20,10 @@ if (config.app.demoMode) {
   console.log('⚠️ デモモードで起動します（SLACK_BOT_TOKENが設定されていません）');
   expressApp = express();
 } else {  // 本番モードではSlack Boltと統合したExpressを使用
-  try {
-    expressReceiver = new ExpressReceiver({
+  try {    expressReceiver = new ExpressReceiver({
       signingSecret: config.slack.signingSecret || 'dummy-secret-for-startup',
       endpoints: '/slack/events', // Slack APIのRequest URLに合わせる
       processBeforeResponse: config.slack.processBeforeResponse,
-      ignoreSelf: false, // 自分のメッセージも処理対象とする
     });
     expressApp = expressReceiver.app;
   } catch (receiverInitError) {
@@ -127,10 +125,7 @@ if (config.app.demoMode) {
       receiver: expressReceiver,
       processBeforeResponse: config.slack.processBeforeResponse,
     });    // リアクション追加イベントのハンドラー登録
-    app.event('reaction_added', async ({ event, client, ack }) => {
-      // Slackに即座に応答
-      await ack();
-      
+    app.event('reaction_added', async ({ event, client }) => {
       console.log('🔄 reaction_added イベントを受信:', {
         reaction: event.reaction,
         user: event.user,
@@ -139,7 +134,7 @@ if (config.app.demoMode) {
         item_type: event.item?.type
       });
       
-      // バックグラウンドで処理を実行
+      // バックグラウンドで処理を実行（イベントは自動的に応答される）
       setImmediate(async () => {
         try {
           await handleCalendarReaction({ event, client });
@@ -150,8 +145,7 @@ if (config.app.demoMode) {
     });
 
     // 他のイベントも監視してデバッグ
-    app.event(/.*/, async ({ event, ack }) => {
-      await ack();
+    app.event(/.*/, async ({ event }) => {
       console.log('📥 受信したイベント:', event.type);
     });
     
