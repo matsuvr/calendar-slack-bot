@@ -19,30 +19,39 @@ function createGoogleCalendarUrl(event) {
     params.append('text', '無題の予定');
   }
   
-  if (event.location && event.location !== null) {
-    params.append('location', event.location);
-  }
-  
+  // descriptionの前処理
   if (event.description) {
     event.description = removeSlackUrlMarkup(event.description);
   }
   
-  // オンラインミーティングURLの抽出と追加
+  // オンラインミーティングURLの抽出
   let videoUrl = null;
   if (event.description) {
     // Google Meetのリンク検出
     const meetUrlMatch = event.description.match(/https:\/\/meet\.google\.com\/[a-z0-9\-]+/i);
     if (meetUrlMatch) {
       videoUrl = meetUrlMatch[0];
-      params.append('add', `conference-${videoUrl}`);
     } else {
       // Zoomリンクの検出
       const zoomUrlMatch = event.description.match(/https:\/\/[^/]*zoom\.(?:us|com)\/j\/[^\s]+/i);
       if (zoomUrlMatch) {
         videoUrl = zoomUrlMatch[0];
-        params.append('add', `conference-${videoUrl}`);
       }
     }
+  }
+  
+  // 場所の設定（会議URLがある場合は含める）
+  if (event.location && event.location !== null) {
+    // 場所が指定されている場合
+    let locationText = event.location;
+    // 会議URLがある場合は場所に追加
+    if (videoUrl) {
+      locationText += ` (${videoUrl})`;
+    }
+    params.append('location', locationText);
+  } else if (videoUrl) {
+    // 場所は指定されていないが会議URLがある場合
+    params.append('location', videoUrl);
   }
   
   if (event.description && event.description !== null) {

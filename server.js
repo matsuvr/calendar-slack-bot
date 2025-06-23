@@ -44,6 +44,31 @@ expressApp.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// デモモード専用：カレンダーURL生成テスト用APIエンドポイント
+if (config.app.demoMode) {
+  const { createGoogleCalendarUrl } = require('./src/utils/calendarUtils');
+  
+  expressApp.post('/api/calendar-url', (req, res) => {
+    try {
+      const eventData = req.body;
+      const calendarUrl = createGoogleCalendarUrl(eventData);
+      
+      res.json({
+        success: true,
+        url: calendarUrl,
+        message: 'GoogleカレンダーURLが正常に生成されました'
+      });
+    } catch (error) {
+      console.error('カレンダーURL生成エラー:', error);
+      res.status(500).json({
+        success: false,
+        message: 'カレンダーURL生成に失敗しました',
+        error: error.message
+      });
+    }
+  });
+}
+
 // Slackのチャレンジリクエストとイベント処理に対応するエンドポイント
 if (config.app.demoMode) {
   // デモモードの場合のみ、直接expressAppにルートを設定

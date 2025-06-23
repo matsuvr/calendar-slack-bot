@@ -40,19 +40,36 @@ describe('calendarUtils', () => {
       const url = createGoogleCalendarUrl(event);
 
       expect(decodeURIComponent(url)).toContain('text=無題の予定');
-    });
-
-    test('Google Meetリンクが含まれる場合は会議情報を追加する', () => {
+    });    test('Google Meetリンクが含まれる場合は場所情報に追加する', () => {
       const event = {
         title: 'オンラインミーティング',
         description: 'Google Meetで開催します https://meet.google.com/abc-defg-hij',
-        startDate: '2025-06-23',
-        startTime: '14:00'
+        date: '2025-06-24',
+        startTime: '12:00'
       };
 
       const url = createGoogleCalendarUrl(event);
 
-      expect(decodeURIComponent(url)).toContain('add=conference-https://meet.google.com/abc-defg-hij');
+      // 会議URLが場所に含まれることを確認
+      expect(decodeURIComponent(url)).toContain('location=https://meet.google.com/abc-defg-hij');
+      // addパラメータに会議情報が含まれないことを確認
+      expect(decodeURIComponent(url)).not.toContain('add=conference-');
+    });
+
+    test('場所とGoogle Meetリンクの両方がある場合は併記する', () => {
+      const event = {
+        title: 'ハイブリッドミーティング',
+        location: '会議室A',
+        description: 'Google Meetでも参加可能 https://meet.google.com/abc-defg-hij',
+        date: '2025-06-24',
+        startTime: '12:00'
+      };
+
+      const url = createGoogleCalendarUrl(event);      // 場所と会議URLが併記されることを確認（デコードして確認）
+      const decodedUrl = decodeURIComponent(url);
+      expect(decodedUrl).toContain('会議室A');
+      expect(decodedUrl).toContain('https://meet.google.com/abc-defg-hij');
+      expect(decodedUrl).toContain('location=');
     });
 
     test('nullやundefinedの値を適切に処理する', () => {
