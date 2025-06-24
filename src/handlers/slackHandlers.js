@@ -4,7 +4,7 @@
 
 const { config } = require('../config/config');
 const { checkAndMarkReactionAsProcessed } = require('../services/firestoreService');
-const { summarizeText, extractEventsFromText } = require('../services/aiService');
+const { summarizeText, extractEventsFromText, extractMeetingInfo } = require('../services/aiService');
 const { createGoogleCalendarUrl, normalizeEventData } = require('../utils/calendarUtils');
 
 // グローバルな処理キュー（メモリ内キャッシュ）
@@ -157,10 +157,25 @@ async function processEventsInBatches({ events, client, channelId, messageTs, or
     }).catch(() => {});
   }
 
-  // 🚀 軽量な要約処理
-  const summary = originalText.length > 100
-    ? originalText.substring(0, 97) + '...'
-    : originalText;
+  // 🚀 会議情報を抽出
+  const meetingInfo = await extractMeetingInfo(originalText);
+  
+  // 🚀 会議情報を考慮した要約処理
+  let summary;
+  if (meetingInfo) {
+    // 会議情報がある場合：テキストの長さに関係なく会議情報は保持
+    const textWithoutMeeting = originalText.replace(meetingInfo, '').trim();
+    if (textWithoutMeeting.length > 80) {
+      summary = textWithoutMeeting.substring(0, 77) + '...\n\n' + meetingInfo;
+    } else {
+      summary = originalText;
+    }
+  } else {
+    // 会議情報がない場合：従来通りの処理
+    summary = originalText.length > 100
+      ? originalText.substring(0, 97) + '...'
+      : originalText;
+  }
   
   const finalDescription = `${summary}\n\nSlack投稿: ${messageUrl}`;
 

@@ -304,45 +304,44 @@ async function extractEventsLegacy(text) {
 }
 
 /**
- * Gemini APIのリトライ機能付き呼び出し
- * @param {Object} requestConfig - API呼び出し設定
- * @param {number} maxRetries - 最大リトライ回数
- * @returns {Promise} - API応答
+ * テキストから会議情報（URL、ID、パスワード等）を抽出
+ * @param {string} text - 抽出対象のテキスト
+ * @returns {Promise<string>} 会議情報の文字列（見つからない場合は空文字）
  */
-async function callGeminiWithRetry(requestConfig, maxRetries = 3) {
-  let lastError;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`🤖 Gemini API呼び出し (試行 ${attempt}/${maxRetries})`);
-      
-      const response = await ai.models.generateContent(requestConfig);
-      console.log(`✅ Gemini API呼び出し成功 (試行 ${attempt})`);
-      return response;
-      
-    } catch (error) {
-      lastError = error;
-      console.warn(`⚠️ Gemini API呼び出し失敗 (試行 ${attempt}/${maxRetries}):`, error.message);
-      
-      // 503エラー（サービス過負荷）の場合は指数バックオフでリトライ
-      if (error.message.includes('503') || error.message.includes('overloaded') || error.message.includes('UNAVAILABLE')) {
-        if (attempt < maxRetries) {
-          const waitTime = Math.pow(2, attempt) * 1000; // 2秒、4秒、8秒...
-          console.log(`🔄 ${waitTime}ms待機後にリトライします...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-          continue;
-        }
-      } else {
-        // 503以外のエラーはすぐに失敗とする
-        throw error;
-      }
+async function extractMeetingInfo(text) {
+  try {
+    const prompt = `以下のテキストから会議に関連する重要な情報を抽出してください。
+以下のような情報が含まれている場合は、必ず抽出してください：
+- Google Meet のURL
+- Microsoft Teams の会議URL
+- Webex の会議URL
+- Zoom の会議URL、ミーティングID、パスコード
+- その他のビデオ会議ツールのURL
+- 会議室名、場所情報
+- 電話番号での参加情報
+
+テキスト：
+${text}
+
+抽出された会議情報のみを返してください。見つからない場合は空文字を返してください。`;
+
+    const response = await model.generateContent(prompt);
+    const result = response.response.text().trim();
+    
+    // 「見つからない」「ありません」等の応答は空文字として扱う
+    if (result.includes('見つからない') || result.includes('ありません') || result.includes('なし')) {
+      return '';
     }
+    
+    return result;
+  } catch (error) {
+    console.error('会議情報抽出エラー:', error);
+    return '';
   }
-  
-  throw lastError;
 }
 
 module.exports = {
   summarizeText,
-  extractEventsFromText
+  extractEventsFromText,
+  extractMeetingInfo
 };
