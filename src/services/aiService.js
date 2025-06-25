@@ -16,14 +16,14 @@ const MAX_CACHE_SIZE = 500;
 function cleanupAICache() {
   const now = Date.now();
   let deleted = 0;
-  
+
   for (const [key, value] of responseCache.entries()) {
     if (now - value.timestamp > CACHE_TTL) {
       responseCache.delete(key);
       deleted++;
     }
   }
-  
+
   if (responseCache.size > MAX_CACHE_SIZE) {
     const entries = Array.from(responseCache.entries());
     entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
@@ -31,7 +31,7 @@ function cleanupAICache() {
     toDelete.forEach(([key]) => responseCache.delete(key));
     deleted += toDelete.length;
   }
-  
+
   if (deleted > 0) {
     console.log(`🗑️ AIキャッシュクリーンアップ: ${deleted}件削除`);
   }
@@ -55,7 +55,7 @@ try {
 async function callGeminiWithRetry(params) {
   const maxRetries = 3;
   const baseDelay = 1000;
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await ai.models.generateContent({
@@ -68,16 +68,16 @@ async function callGeminiWithRetry(params) {
           ...params.config
         }
       });
-      
+
       return response;
     } catch (error) {
       console.error(`❌ Gemini API呼び出しエラー (試行 ${attempt + 1}/${maxRetries}):`, error.message);
-      
+
       // 最後の試行の場合はエラーを投げる
       if (attempt === maxRetries - 1) {
         throw error;
       }
-      
+
       // エクスポネンシャルバックオフ
       const delay = baseDelay * Math.pow(2, attempt);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -92,12 +92,12 @@ async function callGeminiWithRetry(params) {
  */
 async function summarizeText(text) {
   const startTime = Date.now();
-  
+
   try {
     if (text.length <= 100) {
       return text;
     }
-    
+
     // 🚀 高速化: キャッシュチェック
     const cacheKey = `summary:${text.substring(0, 100)}`;
     const cached = responseCache.get(cacheKey);
@@ -105,16 +105,16 @@ async function summarizeText(text) {
       console.log(`⚡ 要約キャッシュヒット (${Date.now() - startTime}ms)`);
       return cached.data;
     }
-      const prompt = `以下のテキストを100文字以内で要約してください。ただし、Google Meet、Zoom、Teams、Webexなどの会議URL,ミーティングID、シークレットなどが含まれていた場合は、URL、ID、シークレットはそのまま残してください。この場合は100文字を超えてしまっても構いません:\n${text}`;
+    const prompt = `以下のテキストを100文字以内で要約してください。ただし、Google Meet、Zoom、Teams、Webexなどの会議URL,ミーティングID、シークレットなどが含まれていた場合は、URL、ID、シークレットはそのまま残してください。この場合は100文字を超えてしまっても構いません:\n${text}`;
 
     // 🚀 修正: 最新のGenAI API呼び出し方法
     console.log('🤖 Gemini要約API呼び出し開始');
-    
+
     // タイムアウト処理を改善
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000);
-    });    try {
+    }); try {
       const response = await Promise.race([
         callGeminiWithRetry({
           model: config.gemini.models.summarize,
@@ -129,14 +129,14 @@ async function summarizeText(text) {
         }),
         timeoutPromise
       ]);
-      
+
       clearTimeout(timeoutId);
       const summary = response.text.trim();
       console.log('✅ Gemini要約完了:', summary.substring(0, 50));
-      
+
       // 🚀 キャッシュに保存
       responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
-      
+
       console.log(`⏱️ AI要約完了: ${Date.now() - startTime}ms`);
       return summary;
     } catch (innerError) {
@@ -156,7 +156,7 @@ async function summarizeText(text) {
  */
 async function extractEventsFromText(text) {
   const startTime = Date.now();
-  
+
   try {
     const now = new Date();
     const currentDate = now.toISOString().split('T')[0];
@@ -174,16 +174,16 @@ async function extractEventsFromText(text) {
       return cached.data;
     }
 
-    const systemPrompt = `
-      あなたはテキストから予定やイベント情報を抽出するシステムです。
-      テキストから予定情報を見つけて、JSONスキーマに沿った形式でレスポンスを返してください。
-      複数の予定が含まれている場合は、それぞれを個別に抽出してください。
-      予定が見つからない場合は空の配列[]を返してください。
-      
-      現在の日時は ${currentDate} ${currentTime} であることを考慮してください。
-    `;
+    // よりシンプルなプロンプトに変更
+    const prompt = `以下のテキストから予定やイベント情報を抽出し、JSON配列形式で返してください。
+予定が見つからない場合は空の配列[]を返してください。
 
-    const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;
+現在の日時: ${currentDate} ${currentTime}
+
+テキスト:
+${text}
+
+JSON形式で返してください（コードブロックは使わず、純粋なJSONのみ）:`;
 
     const responseSchema = {
       type: "array",
@@ -222,7 +222,7 @@ async function extractEventsFromText(text) {
     };
 
     console.log('🤖 Gemini予定抽出API呼び出し開始');
-    
+
     // タイムアウト処理
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
@@ -232,14 +232,11 @@ async function extractEventsFromText(text) {
     const response = await Promise.race([
       callGeminiWithRetry({
         model: config.gemini.models.extract,
-        contents: [
-          { text: systemPrompt },
-          { text: userPrompt }
-        ],
+        contents: prompt,
         config: {
           generationConfig: {
-            temperature: 0.2,
-            topP: 0.8,
+            temperature: 0.1,
+            topP: 0.9,
             responseMimeType: "application/json",
             responseSchema: responseSchema
           }
@@ -247,30 +244,49 @@ async function extractEventsFromText(text) {
       }),
       timeoutPromise
     ]);
-    
+
     clearTimeout(timeoutId);
-    
-    // Structured Outputなので、JSONパースは確実に成功するはず
-    const parsedEvents = JSON.parse(response.text);
-    
+
+    // レスポンステキストの前処理（Markdown形式のJSONをクリーンアップ）
+    let responseText = response.text.trim();
+
+    // ```json...``` のMarkdown形式を除去
+    if (responseText.startsWith('```json') && responseText.endsWith('```')) {
+      responseText = responseText.slice(7, -3).trim();
+    } else if (responseText.startsWith('```') && responseText.endsWith('```')) {
+      responseText = responseText.slice(3, -3).trim();
+    }
+
+    console.log('🔍 API応答テキスト（最初の100文字）:', responseText.substring(0, 100));
+
+    // JSONパース
+    let parsedEvents;
+    try {
+      parsedEvents = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('❌ JSONパースエラー:', parseError.message);
+      console.error('📄 問題のあるレスポンステキスト:', responseText);
+      throw new Error(`JSON解析に失敗しました: ${parseError.message}`);
+    }
+
     if (!Array.isArray(parsedEvents)) {
-      throw new Error('Gemini APIがスキーマに準拠しない応答を返しました');
+      throw new Error('APIレスポンスが配列形式ではありません');
     }
 
     // 🚀 キャッシュに保存
     responseCache.set(cacheKey, { data: parsedEvents, timestamp: Date.now() });
-    
+
     // 定期的なキャッシュクリーンアップ
     if (Math.random() < 0.1) {
       setImmediate(cleanupAICache);
     }
-    
+
     console.log(`⏱️ AI予定抽出完了: ${Date.now() - startTime}ms, ${parsedEvents.length}件`);
     return parsedEvents;
 
   } catch (error) {
     console.error(`❌ AI予定抽出エラー (${Date.now() - startTime}ms):`, error.message);
-    throw error; // エラーを上位に伝播
+    throw error;
   }
 }
 
@@ -307,14 +323,14 @@ ${text}
         }
       }
     });
-    
+
     const result = response.text.trim();
-    
+
     // 「見つからない」「ありません」等の応答は空文字として扱う
     if (result.includes('見つからない') || result.includes('ありません') || result.includes('なし')) {
       return '';
     }
-    
+
     return result;
   } catch (error) {
     console.error('会議情報抽出エラー:', error);
