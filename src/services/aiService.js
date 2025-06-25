@@ -105,7 +105,7 @@ async function summarizeText(text) {
       console.log(`⚡ 要約キャッシュヒット (${Date.now() - startTime}ms)`);
       return cached.data;
     }
-      const prompt = `以下のテキストを100文字以内で要約してください:\n${text}`;
+      const prompt = `以下のテキストを100文字以内で要約してください。ただし、Google Meet、Zoom、Teams、Webexなどの会議URL,ミーティングID、シークレットなどが含まれていた場合は、URL、ID、シークレットはそのまま残してください。この場合は100文字を超えてしまっても構いません:\n${text}`;
 
     // 🚀 修正: 最新のGenAI API呼び出し方法
     console.log('🤖 Gemini要約API呼び出し開始');
@@ -183,7 +183,9 @@ async function extractEventsFromText(text) {
       現在の日時は ${currentDate} ${currentTime} であることを考慮してください。
     `;
 
-    const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;    const responseSchema = {
+    const userPrompt = `以下のテキストから予定やイベント情報を抽出してください：\n${text}`;
+
+    const responseSchema = {
       type: "array",
       items: {
         type: "object",
@@ -217,14 +219,17 @@ async function extractEventsFromText(text) {
         },
         required: ["title"]
       }
-    };    // 🚀 修正: 最新のGenAI API呼び出し方法
+    };
+
     console.log('🤖 Gemini予定抽出API呼び出し開始');
     
-    // タイムアウト処理を改善
+    // タイムアウト処理
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000);
-    });    const response = await Promise.race([
+    });
+
+    const response = await Promise.race([
       callGeminiWithRetry({
         model: config.gemini.models.extract,
         contents: [
@@ -244,100 +249,28 @@ async function extractEventsFromText(text) {
     ]);
     
     clearTimeout(timeoutId);
-    const jsonResponse = response.text;
-
-    try {
-      const parsedEvents = JSON.parse(jsonResponse);
-      if (Array.isArray(parsedEvents)) {
-        // 🚀 キャッシュに保存
-        responseCache.set(cacheKey, { data: parsedEvents, timestamp: Date.now() });
-        
-        // 定期的なキャッシュクリーンアップ
-        if (Math.random() < 0.1) {
-          setImmediate(cleanupAICache);
-        }
-        
-        console.log(`⏱️ AI予定抽出完了: ${Date.now() - startTime}ms, ${parsedEvents.length}件`);
-        return parsedEvents;
-      } else {
-        console.warn('AI応答が配列ではありません、レガシーモードで再試行');
-        return await extractEventsLegacy(text);
-      }
-    } catch (parseError) {
-      console.warn('AI応答のJSON解析に失敗、レガシーモードで再試行:', parseError.message);
-      return await extractEventsLegacy(text);
+    
+    // Structured Outputなので、JSONパースは確実に成功するはず
+    const parsedEvents = JSON.parse(response.text);
+    
+    if (!Array.isArray(parsedEvents)) {
+      throw new Error('Gemini APIがスキーマに準拠しない応答を返しました');
     }
+
+    // 🚀 キャッシュに保存
+    responseCache.set(cacheKey, { data: parsedEvents, timestamp: Date.now() });
+    
+    // 定期的なキャッシュクリーンアップ
+    if (Math.random() < 0.1) {
+      setImmediate(cleanupAICache);
+    }
+    
+    console.log(`⏱️ AI予定抽出完了: ${Date.now() - startTime}ms, ${parsedEvents.length}件`);
+    return parsedEvents;
+
   } catch (error) {
     console.error(`❌ AI予定抽出エラー (${Date.now() - startTime}ms):`, error.message);
-    return await extractEventsLegacy(text);
-  }
-}
-
-/**
- * フォールバック処理（レガシーモード）
- * @param {string} text - 分析するテキスト
- * @returns {Promise<Array>} - 抽出された予定情報の配列
- */
-async function extractEventsLegacy(text) {
-  try {
-    const now = new Date();
-    const currentDate = now.toISOString().split('T')[0];
-    const currentTime = now.toTimeString().slice(0, 5);
-
-    const prompt = `
-      以下のテキストから予定やイベント情報を抽出してください。
-      複数の予定が含まれている場合は、それぞれを個別に抽出してください。
-      
-      現在の日時は ${currentDate} ${currentTime} であることを考慮してください。
-      
-      各予定について、以下の情報を可能な限り特定してください：
-      - タイトル (title)
-      - 日付（YYYY-MM-DD形式）(date)
-      - 開始時間（HH:MM形式、24時間表記）(startTime)
-      - 終了時間（HH:MM形式、24時間表記）(endTime)
-      - 場所（物理的な場所のみ。オンラインミーティングのURLは含めないでください）(location)
-      - 説明（オンラインミーティングのURLや詳細情報を含む）(description)
-      
-      JSONの配列形式のみで返してください。余分なテキストは含めないでください。
-      予定が見つからない場合は空の配列[]を返してください。    `;    const response = await callGeminiWithRetry({
-      model: config.gemini.models.extract,
-      contents: `${prompt}\n\nテキスト: ${text}`,
-      config: {
-        generationConfig: {
-          temperature: 0.2,
-          topP: 0.8,
-          maxOutputTokens: 1024
-        }
-      }
-    });
-    const responseText = response.text;
-
-    try {
-      let parsedJson;
-      try {
-        parsedJson = JSON.parse(responseText.trim());
-      } catch (directParseError) {
-        const jsonBlockMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (jsonBlockMatch) {
-          parsedJson = JSON.parse(jsonBlockMatch[1].trim());
-        } else {
-          const jsonMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-          if (jsonMatch) {
-            parsedJson = JSON.parse(jsonMatch[0]);
-          } else {
-            return [];
-          }
-        }
-      }
-      
-      return Array.isArray(parsedJson) ? parsedJson : [];
-    } catch (parseError) {
-      console.error('レガシーモードでのJSON解析エラー:', parseError);
-      return [];
-    }
-  } catch (error) {
-    console.error('レガシーモードでのAI処理エラー:', error);
-    return [];
+    throw error; // エラーを上位に伝播
   }
 }
 

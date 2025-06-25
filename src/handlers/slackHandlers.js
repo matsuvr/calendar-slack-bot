@@ -3,12 +3,32 @@
  */
 
 const { config } = require('../config/config');
-const { checkAndMarkReactionAsProcessed } = require('../services/firestoreService');
 const { summarizeText, extractEventsFromText, extractMeetingInfo } = require('../services/aiService');
 const { createGoogleCalendarUrl, normalizeEventData } = require('../utils/calendarUtils');
 
-// グローバルな処理キュー（メモリ内キャッシュ）
+// グローバルな処理キュー（メモリ内重複防止）
 const processingQueue = new Map();
+const processedReactions = new Map(); // 処理済みリアクションのキャッシュ
+const REACTION_CACHE_TTL = 300000; // 5分間キャッシュ
+
+/**
+ * 処理済みリアクションキャッシュのクリーンアップ
+ */
+function cleanupReactionCache() {
+  const now = Date.now();
+  let deleted = 0;
+  
+  for (const [key, timestamp] of processedReactions.entries()) {
+    if (now - timestamp > REACTION_CACHE_TTL) {
+      processedReactions.delete(key);
+      deleted++;
+    }
+  }
+  
+  if (deleted > 0) {
+    console.log(`🗑️ リアクションキャッシュクリーンアップ: ${deleted}件削除`);
+  }
+}
 
 /**
  * カレンダー絵文字リアクションが追加された時の処理
@@ -18,20 +38,35 @@ const processingQueue = new Map();
 async function handleCalendarReaction({ event, client }) {
   const startTime = Date.now();
   const queueKey = `${event.item.channel}-${event.item.ts}-${event.reaction}`;
+  const reactionKey = `${event.item.channel}-${event.item.ts}-${event.reaction}-${event.user}`;
   
   try {
     // 🚀 超高速化: 早期リターンチェック
     if (!config.calendarReactions.includes(event.reaction) || 
         event.item.type !== 'message') {
+      console.log('❌ 早期リターン: 対象外のリアクション');
       return;
     }
 
-    // 🚀 重複処理防止（メモリキャッシュ）
+    // 🚀 メモリベース重複処理防止
     if (processingQueue.has(queueKey)) {
       console.log('⚡ 既に処理中のイベント:', queueKey);
       return;
     }
+
+    // 🚀 処理済みリアクションチェック（同一ユーザーの重複防止）
+    if (processedReactions.has(reactionKey)) {
+      console.log('🔄 処理済みリアクション:', reactionKey);
+      return;
+    }
+
+    // キャッシュクリーンアップ（10%の確率で実行）
+    if (Math.random() < 0.1) {
+      cleanupReactionCache();
+    }
+
     processingQueue.set(queueKey, true);
+    processedReactions.set(reactionKey, Date.now());
 
     console.log('✅ カレンダーリアクション検出:', event.reaction);
 
@@ -42,23 +77,34 @@ async function handleCalendarReaction({ event, client }) {
       name: 'hourglass_flowing_sand'
     }).catch(() => {}); // エラーは無視
 
-    // 🚀 重複チェックとメッセージ取得を並列実行
-    const [shouldContinue, messageResult] = await Promise.all([
-      checkAndMarkReactionAsProcessed(
-        event.item.channel, 
-        event.item.ts, 
-        event.reaction, 
-        event.user
-      ).catch(() => true),
-      client.conversations.history({
-        channel: event.item.channel,
-        latest: event.item.ts,
-        inclusive: true,
-        limit: 1
-      })
-    ]);
+    console.log('🔄 Slackメッセージ取得開始');
 
-    if (!shouldContinue || !messageResult?.messages?.[0]?.text) {
+    // 🚀 Slackメッセージ取得のみ実行
+    const messageResult = await client.conversations.history({
+      channel: event.item.channel,
+      latest: event.item.ts,
+      inclusive: true,
+      limit: 1
+    }).catch((error) => {
+      console.error('❌ Slackメッセージ取得エラー:', error.message);
+      return null;
+    });
+
+    console.log('📊 メッセージ取得結果:', {
+      messageExists: !!messageResult,
+      messageCount: messageResult?.messages?.length || 0,
+      hasText: !!messageResult?.messages?.[0]?.text
+    });
+
+    if (!messageResult) {
+      console.log('🛑 メッセージ取得失敗で処理停止');
+      await removeProcessingReaction(client, event.item.channel, event.item.ts);
+      processingQueue.delete(queueKey);
+      return;
+    }
+
+    if (!messageResult?.messages?.[0]?.text) {
+      console.log('🛑 メッセージテキストが空で処理停止');
       await removeProcessingReaction(client, event.item.channel, event.item.ts);
       processingQueue.delete(queueKey);
       return;
@@ -67,6 +113,8 @@ async function handleCalendarReaction({ event, client }) {
     const message = messageResult.messages[0];
     const teamId = config.slack.teamId || 'app';
     const messageUrl = `https://${teamId}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
+
+    console.log('🚀 AI処理開始: メッセージ長', message.text.length, '文字');
 
     // 🚀 AI処理を非同期で開始（結果を待たない）
     processAIAndRespond({
@@ -77,6 +125,7 @@ async function handleCalendarReaction({ event, client }) {
       startTime
     }).finally(() => {
       processingQueue.delete(queueKey);
+      console.log('🏁 処理キュー削除完了:', queueKey);
     });
 
     // 🚀 即座にリターン（AI処理の完了を待たない）
@@ -85,6 +134,7 @@ async function handleCalendarReaction({ event, client }) {
   } catch (error) {
     console.error('handleCalendarReaction エラー:', error);
     processingQueue.delete(queueKey);
+    processedReactions.delete(reactionKey);
     await handleError(client, event, error);
   }
 }
@@ -94,6 +144,8 @@ async function handleCalendarReaction({ event, client }) {
  */
 async function processAIAndRespond({ client, event, message, messageUrl, startTime }) {
   try {
+    console.log('🤖 AI処理開始: extractEventsFromText呼び出し');
+    
     // 🚀 AI処理（タイムアウトを30秒に延長）
     const events = await Promise.race([
       extractEventsFromText(message),
@@ -102,10 +154,13 @@ async function processAIAndRespond({ client, event, message, messageUrl, startTi
       )
     ]);
 
+    console.log('✅ AI処理完了: 検出イベント数', events.length);
+
     // 処理中リアクション削除
     await removeProcessingReaction(client, event.item.channel, event.item.ts);
 
     if (events.length > 0) {
+      console.log('📅 イベント処理開始: バッチ処理実行');
       // 🚀 イベント処理を非同期バッチで実行
       await processEventsInBatches({
         events,
@@ -116,6 +171,7 @@ async function processAIAndRespond({ client, event, message, messageUrl, startTi
         messageUrl
       });
     } else {
+      console.log('🚫 予定情報なし: 通知メッセージ送信');
       // 予定が見つからない場合
       await Promise.all([
         client.reactions.add({
