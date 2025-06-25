@@ -8,26 +8,27 @@ const { config } = require('../config/config');
 // 🚀 高速化: Firestore設定を最適化
 const firestore = new Firestore({
   // 🚀 GRPC設定でタイムアウトとリトライを制御
-  gaxOpts: {
+  settings: {
+    ignoreUndefinedProperties: true,
+  },
+  gaxOptions: {
     timeout: config.firestore.timeout, // タイムアウトをミリ秒で設定
     retry: {
       retryCodes: [
         'UNAVAILABLE', // サーバーが利用不可
         'DEADLINE_EXCEEDED', // タイムアウト
+        'ABORTED', // アボート
       ],
       backoffSettings: {
         initialRetryDelayMillis: 100, // 初回リトライ遅延
         retryDelayMultiplier: 1.3, // 遅延乗数
         maxRetryDelayMillis: 60000, // 最大リトライ遅延
-        initialRpcTimeoutMillis: config.firestore.timeout,
+        initialRpcTimeoutMillis: 5000, // 初回RPCタイムアウト
         rpcTimeoutMultiplier: 1.0,
-        maxRpcTimeoutMillis: config.firestore.timeout,
-        totalTimeoutMillis: config.firestore.timeout * 5, // 全体のタイムアウト
+        maxRpcTimeoutMillis: 10000, // 最大RPCタイムアウト
+        totalTimeoutMillis: 30000, // 全体のタイムアウト
       },
     },
-  },
-  settings: {
-    ignoreUndefinedProperties: true,
   },
 });
 const processedReactionsCollection = firestore.collection('processedReactions');
@@ -125,7 +126,7 @@ async function checkAndMarkReactionAsProcessed(channelId, timestamp, reaction, u
       });
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Firestoreトランザクションがタイムアウトしました')), config.firestore.timeout)
+        setTimeout(() => reject(new Error('Firestoreトランザクションがタイムアウトしました')), 8000) // 8秒に短縮
       );
 
       // Promise.raceでタイムアウトを実装

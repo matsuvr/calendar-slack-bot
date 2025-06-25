@@ -40,11 +40,49 @@ function cleanupAICache() {
 // Gemini APIクライアントの初期化（最新版に修正）
 let ai;
 try {
-  ai = new GoogleGenAI({apiKey: config.gemini.apiKey});
+  ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
   console.log('✅ Gemini APIクライアント初期化成功');
 } catch (error) {
   console.error('❌ Gemini APIの初期化に失敗しました:', error);
   throw error;
+}
+
+/**
+ * Gemini APIのリトライ機能付き呼び出し
+ * @param {Object} params - API呼び出しパラメータ
+ * @returns {Promise<Object>} API応答
+ */
+async function callGeminiWithRetry(params) {
+  const maxRetries = 3;
+  const baseDelay = 1000;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await ai.models.generateContent({
+        model: params.model || config.gemini.models.summarize,
+        contents: params.contents,
+        config: {
+          thinkingConfig: {
+            thinkingBudget: 0, // Thinkingを無効化
+          },
+          ...params.config
+        }
+      });
+      
+      return response;
+    } catch (error) {
+      console.error(`❌ Gemini API呼び出しエラー (試行 ${attempt + 1}/${maxRetries}):`, error.message);
+      
+      // 最後の試行の場合はエラーを投げる
+      if (attempt === maxRetries - 1) {
+        throw error;
+      }
+      
+      // エクスポネンシャルバックオフ
+      const delay = baseDelay * Math.pow(2, attempt);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
 }
 
 /**
@@ -325,8 +363,19 @@ ${text}
 
 抽出された会議情報のみを返してください。見つからない場合は空文字を返してください。`;
 
-    const response = await model.generateContent(prompt);
-    const result = response.response.text().trim();
+    const response = await callGeminiWithRetry({
+      model: config.gemini.models.summarize,
+      contents: prompt,
+      config: {
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.8,
+          maxOutputTokens: 200
+        }
+      }
+    });
+    
+    const result = response.text.trim();
     
     // 「見つからない」「ありません」等の応答は空文字として扱う
     if (result.includes('見つからない') || result.includes('ありません') || result.includes('なし')) {

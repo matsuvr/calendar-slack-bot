@@ -22,6 +22,8 @@ EXPOSE 8080
 # .envファイルがない場合のデフォルト値を設定
 ENV PORT=8080
 ENV NODE_ENV=production
+ENV FIRESTORE_TIMEOUT_MS=6000
+ENV NODE_OPTIONS="--max-http-header-size=16384"
 
 # デバッグ情報用の簡易スクリプトを作成
 RUN echo '#!/bin/bash' > /usr/local/bin/entrypoint.sh && \

@@ -9,7 +9,7 @@ const config = {
   // Firestore設定
   firestore: {
     readonly: process.env.FIRESTORE_READONLY === 'true' || false,
-    timeout: parseInt(process.env.FIRESTORE_TIMEOUT_MS) || 12000, // タイムアウト（ミリ秒）
+    timeout: parseInt(process.env.FIRESTORE_TIMEOUT_MS) || 6000, // タイムアウト（ミリ秒）- 短縮
   },
   
   // サーバー設定
@@ -27,8 +27,8 @@ const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
     models: {
-      summarize: 'gemini-2.0-flash-001',
-      extract: 'gemini-2.0-flash-001',
+      summarize: 'gemini-2.5-flash-lite-preview-06-17',
+      extract: 'gemini-2.5-flash-lite-preview-06-17',
     },
   },
   
