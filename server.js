@@ -87,35 +87,89 @@ expressApp.get('/', (req, res) => {
   res.status(200).send(`
     <html>
       <head>
-        <title>Calendar Slack Bot - Static Page</title>        <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
-          h1 { color: #333; font-size: 1.8em; margin-bottom: 10px; }
-          h2 { color: #FF8C00; margin-top: 10px; font-size: 1.5em; }
-          h3 { color: #FF5722; margin-top: 30px; }
-          .container { text-align: center; padding: 50px 20px; }
-          .status { background: #FFF3E0; padding: 15px; border-radius: 5px; margin: 20px 0; }
-          .button { display: inline-block; background: #FF5722; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; margin-top: 20px; }
+        <title>Calendar Slack Bot - AI-Powered Calendar Assistant</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; max-width: 900px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+          .container { background: white; padding: 40px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          h1 { color: #2c3e50; font-size: 2.2em; margin-bottom: 10px; text-align: center; }
+          h2 { color: #e74c3c; margin-top: 15px; font-size: 1.6em; text-align: center; }
+          h3 { color: #34495e; margin-top: 25px; font-size: 1.3em; border-bottom: 2px solid #e74c3c; padding-bottom: 5px; }
+          .status { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin: 25px 0; text-align: center; }
+          .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 30px 0; }
+          .feature { background: #ecf0f1; padding: 20px; border-radius: 8px; border-left: 4px solid #e74c3c; }
+          .feature h4 { color: #2c3e50; margin-top: 0; font-size: 1.1em; }
+          .tech-stack { background: #34495e; color: white; padding: 20px; border-radius: 8px; margin: 25px 0; }
+          .tech-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 15px; }
+          .tech-item { background: #e74c3c; color: white; padding: 5px 12px; border-radius: 15px; font-size: 0.9em; }
+          .button { display: inline-block; background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 12px 25px; border-radius: 25px; text-decoration: none; margin: 10px 5px; transition: transform 0.2s; }
+          .button:hover { transform: translateY(-2px); }
+          .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #bdc3c7; color: #7f8c8d; }
+          .emoji { font-size: 1.2em; }
         </style>
-      </head>      <body>
+      </head>
+      <body>
         <div class="container">
-          <h1>Slackに書き込まれた予定をカレンダーに登録しようとするBot</h1>
-          <h2 style="color: #FF8C00; margin-top: 10px;">Calendar Slack Bot</h2>
-            <div class="status">
-            <h3>静的ページ表示モード</h3>
-            <p>このページは静的ホスティングページです。サーバーリソースの節約のため、メインページは静的コンテンツとして提供されています。</p>
-            <p>ボットは正常に稼働中です。Slackワークスペースでご利用いただけます。</p>
+          <h1><span class="emoji">🤖</span> Calendar Slack Bot</h1>
+          <h2>AI-Powered Calendar Assistant</h2>
+          
+          <div class="status">
+            <h3 style="margin-top: 0; color: white; border: none;">✨ サービス稼働中</h3>
+            <p>最新のAI技術を活用した高速処理システムで運用中です</p>
+            <p>Slackワークスペースで今すぐご利用いただけます</p>
           </div>
           
-          <p>Slackでカレンダー絵文字（:calendar:）を使用して予定を自動検出します。</p>
-          <p>このサービスはGoogleのCloud Runで動作しています。</p>
+          <div class="features">
+            <div class="feature">
+              <h4><span class="emoji">🧠</span> AI-Powered 予定抽出</h4>
+              <p>Google Gemini AIが自然言語から予定情報を高精度で抽出し、簡潔で分かりやすいタイトルを自動生成します。</p>
+            </div>
+            <div class="feature">
+              <h4><span class="emoji">⚡</span> 高速メモリキャッシュ</h4>
+              <p>メモリ内キャッシュ（TTL: 5分）による重複処理防止で、従来のデータベース接続よりも圧倒的に高速。</p>
+            </div>
+            <div class="feature">
+              <h4><span class="emoji">🌐</span> 日本語処理最適化</h4>
+              <p>全角文字とURL周りのスペース調整、Slackマークアップの早期除去で処理精度が大幅向上。</p>
+            </div>
+            <div class="feature">
+              <h4><span class="emoji">📱</span> バッチ処理対応</h4>
+              <p>最大5件の予定を並列処理（3件ずつ）で効率的に処理し、複数予定にも素早く対応。</p>
+            </div>
+            <div class="feature">
+              <h4><span class="emoji">🔗</span> ミーティングURL統合</h4>
+              <p>Zoom、Google Meet、Microsoft TeamsのURLを自動検出し、カレンダーの場所情報に統合。</p>
+            </div>
+            <div class="feature">
+              <h4><span class="emoji">🔐</span> セキュア＆リライアブル</h4>
+              <p>リトライ機能付きAPI呼び出し、包括的エラーハンドリング、メモリ自動クリーンアップ。</p>
+            </div>
+          </div>
           
-          <a href="https://github.com/yourusername/calendar-slack-bot" class="button">GitHubリポジトリ</a>
+          <div class="tech-stack">
+            <h3 style="margin-top: 0; color: white;">🚀 Technology Stack</h3>
+            <div class="tech-list">
+              <span class="tech-item">Node.js 20+</span>
+              <span class="tech-item">Google Gemini AI</span>
+              <span class="tech-item">Slack Bolt</span>
+              <span class="tech-item">Express.js</span>
+              <span class="tech-item">Google Cloud Run</span>
+              <span class="tech-item">Memory Cache</span>
+              <span class="tech-item">TTL Management</span>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin-top: 30px;">
+            <p><strong>使い方:</strong> Slackメッセージに <span class="emoji">📅</span> :calendar: リアクションを追加するだけ！</p>
+            <a href="https://github.com/yourusername/calendar-slack-bot" class="button">📚 GitHub Repository</a>
+            <a href="/health" class="button">🏥 Health Check</a>
+          </div>
         </div>
         
-        <footer style="text-align: center; margin-top: 50px; font-size: 0.8em; color: #888;">
-          <p>Calendar Slack Bot - ${new Date().getFullYear()}</p>
-          <p>Powered by Firebase & Google Cloud Run</p>
-        </footer>
+        <div class="footer">
+          <p><strong>Calendar Slack Bot</strong> - ${new Date().getFullYear()}</p>
+          <p>Powered by Google Gemini AI • Google Cloud Run • Memory Cache Technology</p>
+          <p>高速 • 正確 • セキュア</p>
+        </div>
       </body>
     </html>
   `);
