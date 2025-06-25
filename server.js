@@ -83,11 +83,11 @@ if (config.app.demoMode) {
 
 // セットアップガイド用のエンドポイント
 expressApp.get('/', (req, res) => {
-  // Cloud Runの使用料を節約するため、静的なFirebaseページを表示
+  // Cloud Runの使用料を節約するため、静的なページを表示
   res.status(200).send(`
     <html>
       <head>
-        <title>Calendar Slack Bot - Firebase Static Page</title>        <style>
+        <title>Calendar Slack Bot - Static Page</title>        <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; }
           h1 { color: #333; font-size: 1.8em; margin-bottom: 10px; }
           h2 { color: #FF8C00; margin-top: 10px; font-size: 1.5em; }

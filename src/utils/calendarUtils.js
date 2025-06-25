@@ -40,18 +40,9 @@ function createGoogleCalendarUrl(event) {
     }
   }
   
-  // 場所の設定（会議URLがある場合は含める）
+  // 場所の設定
   if (event.location && event.location !== null) {
-    // 場所が指定されている場合
-    let locationText = event.location;
-    // 会議URLがある場合は場所に追加
-    if (videoUrl) {
-      locationText += ` (${videoUrl})`;
-    }
-    params.append('location', locationText);
-  } else if (videoUrl) {
-    // 場所は指定されていないが会議URLがある場合
-    params.append('location', videoUrl);
+    params.append('location', event.location);
   }
   
   if (event.description && event.description !== null) {
