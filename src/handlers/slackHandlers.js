@@ -163,9 +163,6 @@ async function processAIAndRespond({ client, event, message, messageUrl, startTi
 
     console.log('✅ AI処理完了: 検出イベント数', events.length);
 
-    // 処理中リアクション削除
-    await removeProcessingReaction(client, event.item.channel, event.item.ts);
-
     if (events.length > 0) {
       console.log('📅 イベント処理開始: バッチ処理実行');
       // 🚀 イベント処理を非同期バッチで実行
@@ -177,8 +174,15 @@ async function processAIAndRespond({ client, event, message, messageUrl, startTi
         originalText: message,
         messageUrl
       });
+      
+      // 🚀 すべてのリプライ送信完了後に砂時計を削除
+      await removeProcessingReaction(client, event.item.channel, event.item.ts);
     } else {
       console.log('🚫 予定情報なし: 通知メッセージ送信');
+      
+      // 🚀 先に砂時計を削除してから通知メッセージを送信
+      await removeProcessingReaction(client, event.item.channel, event.item.ts);
+      
       // 予定が見つからない場合
       await Promise.all([
         client.reactions.add({
@@ -246,6 +250,7 @@ async function processEventsInBatches({ events, client, channelId, messageTs, or
   for (let i = 0; i < processEvents.length; i += BATCH_SIZE) {
     const batch = processEvents.slice(i, i + BATCH_SIZE);
     
+    // 🚀 すべてのリプライ送信を待つように修正
     await Promise.allSettled(
       batch.map(async (eventItem) => {
         try {
@@ -258,18 +263,25 @@ async function processEventsInBatches({ events, client, channelId, messageTs, or
           
           const calendarUrl = createGoogleCalendarUrl(normalizedEvent);
           
-          return client.chat.postMessage({
+          // 🚀 リプライ送信完了を確実に待つ
+          await client.chat.postMessage({
             channel: channelId,
             thread_ts: messageTs,
             text: `📅 ${normalizedEvent.title}\n${calendarUrl}`,
             unfurl_links: false // リンクのプレビューを無効化（高速化）
           });
+          
+          console.log(`✅ リプライ送信完了: ${normalizedEvent.title}`);
         } catch (error) {
           console.error('イベント処理エラー:', error);
         }
       })
     );
+    
+    console.log(`📦 バッチ ${Math.floor(i / BATCH_SIZE) + 1} 処理完了`);
   }
+  
+  console.log('🎉 全イベント処理完了');
 }
 
 /**
