@@ -3,8 +3,8 @@
  */
 
 const { config } = require('../config/config');
-const { summarizeText, extractEventsFromText, extractMeetingInfo } = require('../services/aiService');
-const { createGoogleCalendarUrl, normalizeEventData } = require('../utils/calendarUtils');
+const { summarizeText, extractEventsFromText, extractMeetingInfo, generateCalendarTitle } = require('../services/aiService');
+const { createGoogleCalendarUrl, normalizeEventData, removeSlackUrlMarkup, addSpacesAroundUrls } = require('../utils/calendarUtils');
 
 // グローバルな処理キュー（メモリ内重複防止）
 const processingQueue = new Map();
@@ -111,16 +111,23 @@ async function handleCalendarReaction({ event, client }) {
     }
 
     const message = messageResult.messages[0];
+    
+    // 🚀 Slackマークアップを早期に除去
+    let cleanedText = removeSlackUrlMarkup(message.text);
+    
+    // 🚀 URL前後に全角文字がある場合、半角スペースを追加
+    cleanedText = addSpacesAroundUrls(cleanedText);
+    
     const teamId = config.slack.teamId || 'app';
     const messageUrl = `https://${teamId}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
 
-    console.log('🚀 AI処理開始: メッセージ長', message.text.length, '文字');
+    console.log('🚀 AI処理開始: メッセージ長', cleanedText.length, '文字');
 
     // 🚀 AI処理を非同期で開始（結果を待たない）
     processAIAndRespond({
       client,
       event,
-      message: message.text,
+      message: cleanedText, // クリーンアップ済みテキストを使用
       messageUrl,
       startTime
     }).finally(() => {
@@ -244,6 +251,10 @@ async function processEventsInBatches({ events, client, channelId, messageTs, or
         try {
           const normalizedEvent = normalizeEventData(eventItem);
           normalizedEvent.description = finalDescription;
+          
+          // 🚀 新機能: AIでタイトルを生成
+          const generatedTitle = await generateCalendarTitle(originalText, eventItem);
+          normalizedEvent.title = generatedTitle;
           
           const calendarUrl = createGoogleCalendarUrl(normalizedEvent);
           

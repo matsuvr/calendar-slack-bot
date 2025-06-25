@@ -52,8 +52,9 @@ tests/
 │   ├── api.test.js
 │   └── slack.test.js
 └── mocks/            # モック/スタブ
-    ├── aiService.mock.js
-    └── firestoreService.mock.js
+    └── aiService.mock.js
+
+**注意**: firestoreService.mock.jsは使用されません（メモリ内キャッシュを使用）。
 ```
 
 ### 3. TDDサイクルの実例
@@ -129,6 +130,117 @@ function createGoogleCalendarUrl(event) {
   
   return `${baseUrl}&${params.toString()}`;
 }
+```
+
+#### 例：AIタイトル生成機能のテスト
+
+##### 🔴 Red段階: テストを先に書く
+
+```javascript
+// tests/unit/aiService.test.js
+describe('generateCalendarTitle', () => {
+  test('should generate concise title from event data', async () => {
+    const originalText = '明日13時から14時まで会議室Aでプロジェクト進捗MTG';
+    const eventData = {
+      title: 'プロジェクト進捗MTG',
+      startDate: '2025-06-26',
+      startTime: '13:00',
+      location: '会議室A'
+    };
+
+    const title = await generateCalendarTitle(originalText, eventData);
+
+    expect(title).toBeDefined();
+    expect(title.length).toBeLessThanOrEqual(30);
+    expect(title).toContain('MTG');
+  });
+
+  test('should handle AI failure gracefully', async () => {
+    const originalText = 'テスト';
+    const eventData = { title: 'フォールバックタイトル' };
+
+    const title = await generateCalendarTitle(originalText, eventData);
+
+    expect(title).toBe('フォールバックタイトル'); // フォールバック処理
+  });
+});
+```
+
+#### 例：テキスト前処理機能のテスト
+
+##### 🔴 Red段階: テストを先に書く
+
+```javascript
+// tests/unit/calendarUtils.test.js
+describe('addSpacesAroundUrls', () => {
+  test('should add spaces around URLs adjacent to full-width characters', () => {
+    const text = 'ミーティングhttps://zoom.us/j/123です';
+    
+    const result = addSpacesAroundUrls(text);
+    
+    expect(result).toBe('ミーティング https://zoom.us/j/123 です');
+  });
+
+  test('should not modify URLs already with spaces', () => {
+    const text = 'ミーティング https://zoom.us/j/123 です';
+    
+    const result = addSpacesAroundUrls(text);
+    
+    expect(result).toBe('ミーティング https://zoom.us/j/123 です');
+  });
+});
+
+describe('removeSlackUrlMarkup', () => {
+  test('should remove Slack URL markup', () => {
+    const text = 'リンク: <https://example.com|サンプル>';
+    
+    const result = removeSlackUrlMarkup(text);
+    
+    expect(result).toBe('リンク: https://example.com');
+  });
+});
+```
+
+#### 例：メモリ内キャッシュのテスト
+
+##### 🔴 Red段階: テストを先に書く
+
+```javascript
+// tests/unit/memoryCache.test.js
+describe('Memory Cache', () => {
+  test('should prevent duplicate processing', () => {
+    const processingQueue = new Map();
+    const queueKey = 'channel-123-timestamp-456-calendar';
+    
+    // 初回は処理される
+    expect(processingQueue.has(queueKey)).toBe(false);
+    processingQueue.set(queueKey, true);
+    
+    // 2回目は重複として検出される
+    expect(processingQueue.has(queueKey)).toBe(true);
+  });
+
+  test('should clean up expired cache entries', () => {
+    const processedReactions = new Map();
+    const CACHE_TTL = 300000; // 5分
+    const now = Date.now();
+    
+    // 期限切れのエントリを追加
+    processedReactions.set('old-key', now - CACHE_TTL - 1000);
+    // 有効なエントリを追加
+    processedReactions.set('new-key', now);
+    
+    // クリーンアップ実行
+    for (const [key, timestamp] of processedReactions.entries()) {
+      if (now - timestamp > CACHE_TTL) {
+        processedReactions.delete(key);
+      }
+    }
+    
+    expect(processedReactions.has('old-key')).toBe(false);
+    expect(processedReactions.has('new-key')).toBe(true);
+  });
+});
 ```
 
 ## 🔧 テストのベストプラクティス
@@ -285,12 +397,23 @@ jobs:
 2. **パフォーマンステスト**
    - 大量データでの動作確認
    - メモリ使用量の監視
+   - キャッシュ効率の検証
 
-3. **E2Eテスト**
+3. **AI機能のテスト**
+   - Gemini APIレスポンスのモック
+   - タイトル生成のバリエーションテスト
+   - フォールバック処理のテスト
+
+4. **メモリキャッシュのテスト**
+   - TTL機能の動作確認
+   - 並行処理での競合状態テスト
+   - メモリリーク検証
+
+5. **E2Eテスト**
    - 実際のSlackイベントでのテスト
    - ブラウザでのGoogleカレンダー連携テスト
 
-4. **継続的な改善**
+6. **継続的な改善**
    - カバレッジの向上
    - テスト実行時間の最適化
    - テストの保守性向上

@@ -338,8 +338,81 @@ ${text}
   }
 }
 
+/**
+ * テキストからカレンダータイトルを生成する関数
+ * @param {string} text - 元のテキスト
+ * @param {Object} eventData - 抽出されたイベントデータ
+ * @returns {Promise<string>} - 生成されたタイトル
+ */
+async function generateCalendarTitle(text, eventData = {}) {
+  const startTime = Date.now();
+  
+  try {
+    // 🚀 高速化: キャッシュチェック
+    const cacheKey = `title:${text.substring(0, 50)}:${eventData.title || ''}`;
+    const cached = responseCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+      console.log(`⚡ タイトル生成キャッシュヒット (${Date.now() - startTime}ms)`);
+      return cached.data;
+    }
+
+    const prompt = `以下のテキストから、カレンダーに登録するのに適した簡潔で分かりやすいタイトルを生成してください。
+
+要件：
+- 15文字以内で簡潔に
+- 会議やイベントの目的が分かるように
+- 既存のタイトル「${eventData.title || ''}」がある場合は、それを参考にしつつ改善
+- 「ミーティング」「会議」などの冗長な言葉は省略可能
+- 日本語で出力
+
+テキスト：
+${text}
+
+生成されたタイトルのみを返してください：`;
+
+    console.log('🤖 Geminiタイトル生成API呼び出し開始');
+
+    const response = await callGeminiWithRetry({
+      model: config.gemini.models.lite, // gemini-2.5-flash-liteを使用
+      contents: prompt,
+      config: {
+        generationConfig: {
+          temperature: 0.3,
+          topP: 0.8,
+          maxOutputTokens: 50
+        }
+      }
+    });
+
+    let generatedTitle = response.text.trim();
+    
+    // タイトルの後処理
+    generatedTitle = generatedTitle
+      .replace(/^["'「]|["'」]$/g, '') // 引用符を除去
+      .replace(/^\d+\.\s*/, '') // 番号付きリストの数字を除去
+      .substring(0, 20); // 最大20文字に制限
+
+    // フォールバック処理
+    if (!generatedTitle || generatedTitle.length < 2) {
+      generatedTitle = eventData.title || 'カレンダー予定';
+    }
+
+    // 🚀 キャッシュに保存
+    responseCache.set(cacheKey, { data: generatedTitle, timestamp: Date.now() });
+
+    console.log(`⏱️ タイトル生成完了: ${Date.now() - startTime}ms - "${generatedTitle}"`);
+    return generatedTitle;
+
+  } catch (error) {
+    console.error(`❌ タイトル生成エラー (${Date.now() - startTime}ms):`, error.message);
+    // エラー時はフォールバック
+    return eventData.title || text.substring(0, 15) + '...' || 'カレンダー予定';
+  }
+}
+
 module.exports = {
   summarizeText,
   extractEventsFromText,
-  extractMeetingInfo
+  extractMeetingInfo,
+  generateCalendarTitle // 新しい関数をエクスポート
 };

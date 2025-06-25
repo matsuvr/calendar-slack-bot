@@ -5,21 +5,24 @@ Slackでカレンダー絵文字が付けられた投稿から予定情報を自
 ## 機能概要
 
 - Slack上でカレンダー関連の絵文字リアクション（:calendar:など）が付けられたメッセージを検出
-- Gemini AI APIを使用して投稿内容から予定情報を自動抽出
+- Gemini AI API（gemini-2.5-flash-lite）を使用して投稿内容から予定情報を自動抽出
+- AIによる簡潔で分かりやすいカレンダータイトル生成
 - 予定のタイトル、日時、場所、説明文などを解析
-- 複数の予定を同時に処理可能（最大5件）
+- 複数の予定を同時に処理可能（最大5件、バッチ処理）
 - 長い説明文を自動で100文字以内に要約（重要情報を保持）
-- Googleカレンダーへ予定を追加するためのURLを生成（オンラインミーティングリンクも自動検出）
+- Googleカレンダーへ予定を追加するためのURLを生成（オンラインミーティングリンクも自動検出し場所に組み込み）
 - Slackのスレッドに予定情報と共にカレンダー追加用リンクを返信
-- Firestoreを使用した重複処理防止機能
+- メモリ内キャッシュによる高速な重複処理防止機能（TTL: 5分）
+- 日本語テキスト処理の最適化（URL周りのスペース調整）
 
 ## 前提条件
 
 - Node.js v20以上
 - Slack APIアカウントとワークスペース管理権限
 - Google AI Studio（Gemini API）のアクセス権
-- （オプション）Google Cloud Firestoreアクセス権
 - （デプロイ時）Google Cloud Platformアカウント
+
+**注意**: Firestoreは必要ありません（メモリ内キャッシュを使用）。
 
 ## インストール方法
 
@@ -44,7 +47,7 @@ Slackでカレンダー絵文字が付けられた投稿から予定情報を自
    - `SLACK_BOT_TOKEN`: SlackボットのOAuthトークン
    - `SLACK_SIGNING_SECRET`: Slackアプリの署名シークレット
    - `GEMINI_API_KEY`: Gemini APIキー
-   - `FIRESTORE_PROJECT_ID`: (オプション) FirestoreプロジェクトID
+   - `SLACK_TEAM_ID`: （オプション）SlackチームID（メッセージURLに使用）
 
 4. 開発サーバーの起動
    ```bash
@@ -106,7 +109,7 @@ Slackでカレンダー絵文字が付けられた投稿から予定情報を自
      --platform managed \
      --region us-central1 \
      --allow-unauthenticated \
-     --set-env-vars SLACK_BOT_TOKEN=xoxb-your-token,SLACK_SIGNING_SECRET=your-secret,GEMINI_API_KEY=your-api-key
+     --set-env-vars SLACK_BOT_TOKEN=xoxb-your-token,SLACK_SIGNING_SECRET=your-secret,GEMINI_API_KEY=your-api-key,SLACK_TEAM_ID=your-team-id
    ```
 
 ### Cloud Buildによる自動デプロイ
@@ -117,13 +120,7 @@ Slackでカレンダー絵文字が付けられた投稿から予定情報を自
 2. 環境変数を[Secret Manager](https://console.cloud.google.com/security/secret-manager)で設定
 3. トリガーを設定してデプロイを自動化
 
-### Firestore設定（オプション）
-
-重複リクエスト防止のため、Firestoreを使用する場合：
-
-1. Google CloudコンソールでFirestoreデータベースを作成
-2. サービスアカウントに適切な権限を付与
-3. デプロイ時に`FIRESTORE_PROJECT_ID`環境変数を設定
+**注意**: Firestoreの設定は不要です（メモリ内キャッシュを使用）。
 
 ## 使い方
 
@@ -143,14 +140,15 @@ Slackでカレンダー絵文字が付けられた投稿から予定情報を自
 
 ```
 明日13時から14時まで会議室Aでプロジェクト進捗MTG
+ZoomミーティングURL: https://us02web.zoom.us/j/123456789
 ```
 
-このようなシンプルなメッセージから以下の予定情報が抽出されます：
-- タイトル: プロジェクト進捗MTG
-- 日付: 2025-04-23（明日の日付）
+このようなメッセージから以下の予定情報が抽出されます：
+- タイトル: AIが生成した簡潔なタイトル（例：「プロジェクト進捗MTG」）
+- 日付: 2025-06-26（明日の日付）
 - 開始時間: 13:00
 - 終了時間: 14:00
-- 場所: 会議室A
+- 場所: 会議室A + ZoomミーティングURL
 
 ## トラブルシューティング
 
@@ -176,7 +174,14 @@ Slackでカレンダー絵文字が付けられた投稿から予定情報を自
 ### Gemini API関連の問題
 - APIキーの有効期限と権限を確認
 - レート制限に達していないか確認
-- 指定したモデルが利用可能か確認
+- 指定したモデル（gemini-2.5-flash-lite-preview-06-17）が利用可能か確認
+- リトライ機能が正常に動作しているか確認
+
+### メモリ内キャッシュ関連の問題
+- キャッシュサイズが適切か確認
+- TTL設定（5分）が適切か確認
+- メモリリークが発生していないか確認
+- キャッシュクリーンアップが正常に動作しているか確認
 
 ## 開発者向け情報
 

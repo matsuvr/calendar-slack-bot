@@ -14,7 +14,8 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 └─────────────┘     └──────────────┘     └───────────────┘
                            │
                            ├────────────►┌───────────────┐
-                           │             │   Firestore   │
+                           │             │ メモリキャッシュ │
+                           │             │   (TTL: 5分)  │
                            │             └───────────────┘
                            ▼
                     ┌──────────────┐
@@ -102,9 +103,24 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 - `description`: 説明（オプション）
 
 **内部処理**:
-1. Gemini APIを使用してテキストを分析
+1. Gemini API（gemini-2.5-flash-lite-preview-06-17）を使用してテキストを分析
 2. 予定情報をJSON形式で構造化
-3. 失敗した場合はレガシーモードで再試行
+3. リトライ機能付きでエラー処理
+
+#### `generateCalendarTitle(originalText, eventData)`
+
+AIを使用してカレンダーに適した簡潔なタイトルを生成します。
+
+**引数**:
+- `originalText` (string): 元のメッセージテキスト
+- `eventData` (object): 抽出された予定データ
+
+**戻り値**:
+- 生成されたタイトル文字列（30文字以内）
+
+**内部処理**:
+- キャッシュ機能付き
+- フォールバック処理（AI失敗時は元のタイトルを使用）
 
 #### `summarizeText(text, maxLength = 100)`
 
@@ -136,6 +152,26 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 - 日時 (`dates` - ISO 8601形式)
 - ビデオ会議リンク（Zoom、Google Meet、Microsoft Teamsを自動検出）
 
+#### `addSpacesAroundUrls(text)`
+
+URL周りに全角文字がある場合、半角スペースを追加して処理精度を向上させます。
+
+**引数**:
+- `text` (string): 処理するテキスト
+
+**戻り値**:
+- スペース調整されたテキスト（string）
+
+#### `removeSlackUrlMarkup(text)`
+
+Slackのマークアップ記法（`<URL|表示テキスト>`）を除去します。
+
+**引数**:
+- `text` (string): クリーンアップするテキスト
+
+**戻り値**:
+- クリーンアップされたテキスト（string）
+
 #### `detectMeetingUrls(text)`
 
 テキスト内のオンラインミーティングURLを検出します。
@@ -146,17 +182,33 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 **戻り値**:
 - 検出されたミーティングURLの配列
 
-### 4.3. Firestoreサービス (`src/services/firestoreService.js`)
+### 4.3. メモリ内キャッシュ（`src/handlers/slackHandlers.js`内）
 
-#### `checkAndStoreReactionId(reactionId)`
+Calendar Slack Botではメモリ内キャッシュを使用して重複処理を防止します。
 
-リアクションIDを検証し、処理済みでなければFirestoreに保存します。
+#### 処理キュー (`processingQueue`)
 
-**引数**:
-- `reactionId` (string): チェックするリアクションID
+現在処理中のイベントを管理し、重複処理を防止します。
 
-**戻り値**:
-- `{ exists: boolean }`: リアクションが既に処理済みかどうか
+**データ構造**: Map
+- キー: `${channel}-${timestamp}-${reaction}`
+- 値: true（処理中フラグ）
+
+#### 処理済みリアクション (`processedReactions`)
+
+処理済みのリアクションをTTL付きで管理します。
+
+**データ構造**: Map
+- キー: `${channel}-${timestamp}-${reaction}-${user}`
+- 値: 処理時のタイムスタンプ
+- TTL: 5分間（300,000ms）
+
+#### `cleanupReactionCache()`
+
+期限切れのキャッシュエントリを定期的にクリーンアップします。
+
+**実行頻度**: 10%の確率でランダム実行
+**削除条件**: 現在時刻 - 登録時刻 > TTL
 
 ## 5. デプロイメント設定
 
@@ -167,10 +219,12 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 | `SLACK_BOT_TOKEN` | Slackボットのトークン | ✓ |
 | `SLACK_SIGNING_SECRET` | Slackアプリの署名シークレット | ✓ |
 | `GEMINI_API_KEY` | Gemini APIキー | ✓ |
-| `FIRESTORE_PROJECT_ID` | FirestoreプロジェクトID |  |
+| `SLACK_TEAM_ID` | SlackチームID（メッセージURL生成用） |  |
+| `GEMINI_LITE_MODEL` | Gemini Liteモデル名（デフォルト: gemini-2.5-flash-lite-preview-06-17） |  |
 | `PORT` | サーバーポート番号（デフォルト: 8080） |  |
-| `SLACK_TEAM_ID` | SlackチームID（オプション） |  |
 | `NODE_ENV` | 実行環境（production/development） |  |
+
+**注意**: `FIRESTORE_PROJECT_ID`は使用されません（メモリ内キャッシュを使用）。
 
 ### 5.2. Cloud Run設定
 
@@ -179,6 +233,11 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 **最大インスタンス数**: 10  
 **タイムアウト**: 300秒  
 **コンテナ環境**: Node.js 20
+
+**高速化設定**:
+- 並列処理によるバッチ処理（最大3件同時）
+- メモリ内キャッシュによる重複除去
+- 非同期処理によるレスポンス時間短縮
 
 ## 6. エラーレスポンス
 
@@ -193,9 +252,25 @@ Slackスレッドに対して以下のレスポンスを返します:
 ### 6.2. APIエラー
 
 Slackスレッドに対して以下のレスポンスを返します:
+
+**タイムアウトエラー**:
 ```
-エラーが発生しました: [エラーメッセージ]
-技術サポートチームにお問い合わせください。
+⏰ 処理がタイムアウトしました。しばらく待ってから再度お試しください。
+```
+
+**AI サービス混雑エラー**:
+```
+🚧 AI サービスが混雑しています。しばらく待ってから再度お試しください。
+```
+
+**認証エラー**:
+```
+🔐 認証エラーが発生しました。管理者にお問い合わせください。
+```
+
+**一般エラー**:
+```
+❌ 処理中にエラーが発生しました: [エラーメッセージ]
 ```
 
 ### 6.3. 複数予定検出時の上限超過
@@ -222,5 +297,14 @@ Slackスレッドに対して以下のレスポンスを返します:
 - サーバーはHTTPSのみを使用
 - APIキーは環境変数を通じて安全に管理
 - 予定の説明文を要約する際も重要情報（URL、ミーティングID）は保持
-- Firestoreトランザクションによる重複処理防止
+- メモリ内キャッシュによる高速な重複処理防止（TTL付き）
 - 環境変数を使用した認証情報の分離
+
+## 9. パフォーマンス最適化
+
+- 早期段階でのSlackマークアップ除去
+- URL周りのスペース調整による処理精度向上
+- バッチ処理による並列イベント処理（3件ずつ）
+- AIタイトル生成のキャッシュ機能
+- 非同期処理による即座のレスポンス
+- メモリ内キャッシュの定期クリーンアップ

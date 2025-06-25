@@ -19,30 +19,28 @@ function createGoogleCalendarUrl(event) {
     params.append('text', '無題の予定');
   }
   
-  // descriptionの前処理
-  if (event.description) {
-    event.description = removeSlackUrlMarkup(event.description);
-  }
+  // 場所の設定（オンライン会議URLの自動検出を含む）
+  let location = event.location;
   
-  // オンラインミーティングURLの抽出
-  let videoUrl = null;
+  // オンラインミーティングURLの抽出と場所への追加
   if (event.description) {
     // Google Meetのリンク検出
     const meetUrlMatch = event.description.match(/https:\/\/meet\.google\.com\/[a-z0-9\-]+/i);
     if (meetUrlMatch) {
-      videoUrl = meetUrlMatch[0];
+      const videoUrl = meetUrlMatch[0];
+      location = location ? `${location} | ${videoUrl}` : videoUrl;
     } else {
       // Zoomリンクの検出
       const zoomUrlMatch = event.description.match(/https:\/\/[^/]*zoom\.(?:us|com)\/j\/[^\s]+/i);
       if (zoomUrlMatch) {
-        videoUrl = zoomUrlMatch[0];
+        const videoUrl = zoomUrlMatch[0];
+        location = location ? `${location} | ${videoUrl}` : videoUrl;
       }
     }
   }
   
-  // 場所の設定
-  if (event.location && event.location !== null) {
-    params.append('location', event.location);
+  if (location && location !== null) {
+    params.append('location', location);
   }
   
   if (event.description && event.description !== null) {
@@ -141,6 +139,43 @@ function removeSlackUrlMarkup(text) {
 }
 
 /**
+ * URL前後に全角文字がある場合、URLの前後に半角スペースを追加する
+ * @param {string} text - 処理するテキスト
+ * @returns {string} - 変換後のテキスト
+ */
+function addSpacesAroundUrls(text) {
+  if (!text) return text;
+  
+  // より実用的で簡潔なURL正規表現（https://とhttp://のみ対応）
+  const urlRegex = /https?:\/\/[^\s\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF]+/gi;
+  
+  return text.replace(urlRegex, (url, offset) => {
+    let result = url;
+    
+    // URL前の文字をチェック
+    if (offset > 0) {
+      const prevChar = text[offset - 1];
+      // 全角文字かどうかを判定（ひらがな、カタカナ、漢字、全角記号など）
+      if (/[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF]/.test(prevChar)) {
+        result = ' ' + result;
+      }
+    }
+    
+    // URL後の文字をチェック
+    const nextCharIndex = offset + url.length;
+    if (nextCharIndex < text.length) {
+      const nextChar = text[nextCharIndex];
+      // 全角文字かどうかを判定
+      if (/[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\uFF00-\uFFEF]/.test(nextChar)) {
+        result = result + ' ';
+      }
+    }
+    
+    return result;
+  });
+}
+
+/**
  * イベントデータを標準化・検証する
  * @param {Object} event - イベントデータ
  * @returns {Object} - 標準化されたイベントデータ
@@ -162,5 +197,7 @@ function normalizeEventData(event) {
 
 module.exports = {
   createGoogleCalendarUrl,
-  normalizeEventData
+  normalizeEventData,
+  removeSlackUrlMarkup,
+  addSpacesAroundUrls
 };
