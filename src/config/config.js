@@ -29,7 +29,7 @@ const config = {
     models: {
       summarize: 'gemini-2.5-flash',
       extract: 'gemini-2.5-flash',
-      lite: process.env.GEMINI_LITE_MODEL || 'gemma-3-27b-it'
+      lite: process.env.GEMINI_LITE_MODEL || 'gemma-3n-e4b-it'
     },
   },
   
