@@ -50,9 +50,8 @@ sequenceDiagram
     participant Slack as 💬 Slack
     participant CloudRun as ☁️ Cloud Run<br/>(Node.js Bot)
     participant Gemini as 🧠 Gemini AI<br/>(gemini-2.5-flash)
-    participant Calendar as 📅 Google Calendar
 
-    Note over User,Calendar: シンプルな処理フロー（Cloud Run中継）
+    Note over User,Gemini: シンプルな処理フロー（Cloud Run中継）
 
     User->>Slack: 📅 カレンダー絵文字を投稿にリアクション
     Slack->>CloudRun: reaction_added イベント通知 (Webhook)
@@ -64,8 +63,8 @@ sequenceDiagram
     Note right of Gemini: 日時・場所・URL・概要を解析<br/>応答時間とAPI料金を最適化
     Gemini-->>CloudRun: 抽出された予定データ
     
-    CloudRun->>Calendar: 予定データからカレンダーURL生成
-    Calendar-->>CloudRun: Google Calendar追加用URL
+    CloudRun->>CloudRun: 予定データをURLエンコードして<br/>Google Calendar追加用URL生成
+    Note right of CloudRun: 内部処理でURL構築<br/>Google Calendar APIは使用しない
     
     CloudRun->>Slack: 元投稿にカレンダーリンクをリプライ
     Slack-->>User: カレンダーリンクが表示される
@@ -119,9 +118,8 @@ sequenceDiagram
     participant MC as 💾 Memory Cache
     participant AI as 🧠 AI Service
     participant GA as 🤖 Gemini API
-    participant CS as 📅 Calendar Service
 
-    Note over U,CS: カレンダー絵文字リアクション → カレンダーリンク生成フロー
+    Note over U,GA: カレンダー絵文字リアクション → カレンダーリンク生成フロー
 
     U->>S: 📅 カレンダー絵文字でリアクション
     S->>WS: POST /slack/events (Webhook)
@@ -169,8 +167,7 @@ sequenceDiagram
                 end
                 AI-->>EH: 生成タイトル
                 
-                EH->>CS: Google Calendar URL生成
-                CS-->>EH: カレンダー追加URL
+                EH->>EH: イベントデータをURLエンコードして<br/>Google Calendar URL生成
                 
                 EH->>S: カレンダーリンク付き返信
             end
@@ -458,7 +455,8 @@ flowchart LR
     D --> D2[メモリ効率: <512MB<br/>コンテナリソース]
     D --> D3[処理時間短縮: >50%<br/>キャッシュ効果]
 ```
-## 10. 今後の拡張計画と進化
+
+---
 
 ### 10.1 短期計画（3-6ヶ月）
 
@@ -500,55 +498,6 @@ flowchart TD
     D --> D1[SSO統合<br/>企業認証連携]
     D --> D2[権限管理<br/>ロールベースアクセス]
     D --> D3[コンプライアンス<br/>SOC2・GDPR対応]
-```
-
-## 11. 技術的負債と改善機会
-
-### 11.1 現在の技術的課題
-
-```mermaid
-flowchart LR
-    A[技術的負債] --> B[アーキテクチャ]
-    A --> C[コード品質]
-    A --> D[運用効率]
-    
-    B --> B1[モノリス構造<br/>マイクロサービス化]
-    B --> B2[メモリ依存<br/>永続化層追加]
-    B --> B3[単一障害点<br/>冗長化]
-    
-    C --> C1[テストカバレッジ<br/>90%+ 目標]
-    C --> C2[型安全性<br/>TypeScript移行]
-    C --> C3[コード標準化<br/>ESLint・Prettier]
-    
-    D --> D1[手動デプロイ<br/>CI/CD パイプライン]
-    D --> D2[監視不足<br/>包括的オブザーバビリティ]
-    D --> D3[ドキュメント<br/>API仕様・運用手順]
-```
-
-### 11.2 改善ロードマップ
-
-```mermaid
-gantt
-    title Calendar Slack Bot 改善ロードマップ
-    dateFormat YYYY-MM-DD
-    section Phase 1 (基盤強化)
-    TypeScript移行          :done, ts-migration, 2025-01-01, 30d
-    テスト強化              :active, test-improve, 2025-01-15, 45d
-    CI/CD パイプライン      :ci-cd, after test-improve, 30d
-    section Phase 2 (機能拡張)
-    Redis導入              :redis, after ci-cd, 20d
-    他カレンダー対応        :calendar, after redis, 60d
-    多言語対応              :i18n, after calendar, 45d
-    section Phase 3 (運用強化)
-    監視強化                :monitoring, 2025-03-01, 30d
-    ダッシュボード構築      :dashboard, after monitoring, 45d
-    自動スケーリング        :scaling, after dashboard, 30d
-    section Phase 4 (エンタープライズ)
-    SSO統合                :sso, 2025-05-01, 60d
-    権限管理                :rbac, after sso, 45d
-    コンプライアンス        :compliance, after rbac, 90d
-```
-
 ---
 
 ## まとめ
@@ -778,9 +727,8 @@ sequenceDiagram
     participant Slack as 📱 Slack
     participant CloudRun as ☁️ Cloud Run<br/>(Node.js中継サーバー)
     participant Gemini as 🧠 Gemini AI<br/>(gemini-2.5-flash)
-    participant GoogleCal as 📅 Google Calendar
 
-    Note over User,GoogleCal: シンプルな基本フロー
+    Note over User,Gemini: シンプルな基本フロー
 
     User->>Slack: 📅 カレンダー絵文字でリアクション
     Slack->>CloudRun: 「カレンダースタンプが付いた」通知
@@ -792,14 +740,14 @@ sequenceDiagram
     Note right of Gemini: Google AI Studio<br/>gemini-2.5-flash<br/>応答時間・料金最適化
     Gemini-->>CloudRun: 抽出結果（日時、場所、概要など）
     
-    CloudRun->>GoogleCal: 抽出データからカレンダーURL生成
-    GoogleCal-->>CloudRun: カレンダー登録用URL
+    CloudRun->>CloudRun: 抽出データをURLエンコードして<br/>Google Calendar登録用URL生成
+    Note right of CloudRun: 内部処理でURL構築<br/>Google Calendar APIは使用しない
     
     CloudRun->>Slack: 元投稿にリプライでカレンダーリンク送信
     Slack-->>User: 「📅 カレンダーに追加」リンク表示
 
     Note over CloudRun: Cloud Runが全ての処理を中継<br/>Node.jsアプリケーション
-    Note over User,GoogleCal: クリック一つでカレンダー登録完了！
+    Note over User,Gemini: クリック一つでカレンダー登録完了！
 ```
 
 ### 処理内容の詳細
