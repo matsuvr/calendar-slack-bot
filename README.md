@@ -19,6 +19,8 @@ Slackメッセージにカレンダー絵文字でリアクションするだけ
 - **日本語特化**: Slackマークアップ除去と日本語URL周りの空白調整
 - **サーバーレス完全対応**: Cloud Run上での完全ステートレス設計
 
+https://youtu.be/cAIFGSNcwrU
+
 ```mermaid
 sequenceDiagram
     participant User as 👤 ユーザー
