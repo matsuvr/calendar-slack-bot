@@ -176,9 +176,9 @@ async function extractEventsFromText(text) {
 
     // よりシンプルなプロンプトに変更
     const prompt = `以下のテキストから予定やイベント情報を抽出し、JSON配列形式で返してください。
-予定が見つからない場合は空の配列[]を返してください。
+予定が見つからない場合は空の配列[]を返してください。特に、日付と時間が重要なので、注意深く抽出してください。
 
-現在の日時: ${currentDate} ${currentTime}
+現在の日時が ${currentDate} ${currentTime} であることを考慮してください。
 
 テキスト:
 ${text}
