@@ -6,7 +6,7 @@
 
 - **バックエンド**: Node.js (v20+)
 - **フレームワーク**: Express、Slack Bolt
-- **AI処理**: Google Gemini API（gemini-2.5-flash-lite-preview-06-17）
+- **AI処理**: Google Gemini API（gemini-2.5-flash）
 - **重複除去**: メモリ内キャッシュ（TTL付き）
 - **デプロイ環境**: Google Cloud Run
 - **ロギング**: Console logs（Cloud Run環境ではCloud Loggingに自動転送）
@@ -32,7 +32,7 @@
 
 ### 2.3. AI処理サービス (`src/services/aiService.js`)
 
-- Gemini API（gemini-2.5-flash-lite）との通信
+- Gemini API（gemini-2.5-flash）との通信
 - リトライ機能付きAPI呼び出し
 - テキスト解析とJSON変換
 - 構造化されたイベント抽出
@@ -64,7 +64,7 @@
 4. メモリ内キャッシュで既に処理済みのリアクションかチェック（TTL: 5分）
 5. 対象メッセージのテキストを取得
 6. 早期段階でSlackマークアップを除去し、URL周りにスペースを挿入
-7. Gemini API（gemini-2.5-flash-lite）を使用して予定情報を抽出
+7. Gemini API（gemini-2.5-flash）を使用して予定情報を抽出
 8. 予定情報がない場合はエラーメッセージ返信
 9. 複数の予定が検出された場合の処理（最大件数制限）
 10. AIを使用してカレンダータイトルを生成（キャッシュ付き）
@@ -191,9 +191,9 @@ const calendarReactions = [
 const gemini = {
   apiKey: process.env.GEMINI_API_KEY,
   models: {
-    summarize: 'gemini-2.5-flash-lite-preview-06-17',
-    extract: 'gemini-2.5-flash-lite-preview-06-17',
-    lite: 'gemini-2.5-flash-lite-preview-06-17'
+    summarize: 'gemini-2.5-flash-preview-06-17',
+    extract: 'gemini-2.5-flash-preview-06-17',
+    lite: 'gemini-2.5-flash-preview-06-17'
   },
 };
 ```
@@ -238,7 +238,7 @@ const REACTION_CACHE_TTL = 300000; // 5分間キャッシュ
 - APIキーの有効性確認
 - レート制限の確認
 - プロンプト設計の最適化
-- モデル指定の確認（gemini-2.5-flash-lite-preview-06-17）
+- モデル指定の確認（gemini-2.5-flash-preview-06-17）
 - リトライ機能の動作確認
 
 ### 11.3. メモリ内キャッシュ関連問題

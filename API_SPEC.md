@@ -103,7 +103,7 @@ Calendar Slack Botは、Slack上でカレンダー関連の絵文字リアクシ
 - `description`: 説明（オプション）
 
 **内部処理**:
-1. Gemini API（gemini-2.5-flash-lite-preview-06-17）を使用してテキストを分析
+1. Gemini API（gemini-2.5-flash-preview-06-17）を使用してテキストを分析
 2. 予定情報をJSON形式で構造化
 3. リトライ機能付きでエラー処理
 
@@ -220,7 +220,7 @@ Calendar Slack Botではメモリ内キャッシュを使用して重複処理�
 | `SLACK_SIGNING_SECRET` | Slackアプリの署名シークレット | ✓ |
 | `GEMINI_API_KEY` | Gemini APIキー | ✓ |
 | `SLACK_TEAM_ID` | SlackチームID（メッセージURL生成用） |  |
-| `GEMINI_LITE_MODEL` | Gemini Liteモデル名（デフォルト: gemini-2.5-flash-lite-preview-06-17） |  |
+| `GEMINI_LITE_MODEL` | Gemini Liteモデル名（デフォルト: gemini-2.5-flash-preview-06-17） |  |
 | `PORT` | サーバーポート番号（デフォルト: 8080） |  |
 | `NODE_ENV` | 実行環境（production/development） |  |
 

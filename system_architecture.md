@@ -224,7 +224,7 @@ flowchart TB
 flowchart LR
     subgraph "External Services"
         SA[📱 Slack API<br/>Events & Chat]
-        GA[🧠 Google Gemini AI<br/>gemini-2.5-flash-lite]
+        GA[🧠 Google Gemini AI<br/>gemini-2.5-flash]
         GC[📅 Google Calendar<br/>URL Generation]
         CR[☁️ Google Cloud Run<br/>Container Platform]
     end
@@ -565,9 +565,9 @@ Calendar Slack Botは、現代的なクラウドネイティブアーキテク�
 - `callGeminiWithRetry()` - リトライ機能付きAPI呼び出し
 
 **使用モデル:**
-- Extract: `gemini-2.5-flash-lite-preview-06-17`
-- Title Generation: `gemini-2.5-flash-lite-preview-06-17`
-- Summarize: `gemini-2.5-flash-lite-preview-06-17`
+- Extract: `gemini-2.5-flash-preview-06-17`
+- Title Generation: `gemini-2.5-flash-preview-06-17`
+- Summarize: `gemini-2.5-flash-preview-06-17`
 
 **キャッシュ管理:**
 - AIレスポンスキャッシュ: `Map<string, {data, timestamp}>` （30分TTL）
