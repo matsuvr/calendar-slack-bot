@@ -373,7 +373,7 @@ ${text}
     console.log('🤖 Geminiタイトル生成API呼び出し開始');
 
     const response = await callGeminiWithRetry({
-      model: config.gemini.models.lite, // gemini-2.5-flash-liteを使用
+      model: config.gemini.models.lite, // gemma 3を使用
       contents: prompt,
       config: {
         generationConfig: {
