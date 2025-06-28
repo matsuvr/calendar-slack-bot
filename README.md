@@ -15,7 +15,7 @@ Slackメッセージにカレンダー絵文字でリアクションするだけ
 ### **技術的な独自性**
 - **ゼロAPI依存**: Google Calendar APIを使わず、URLエンコードによるカレンダー連携
 - **高速キャッシュシステム**: メモリ内TTLキャッシュによる重複処理防止と高速化
-- **AI最適化**: 料金とレスポンス時間を両立するgemini-2.5-flash活用
+- **AI最適化**: 料金とレスポンス時間を両立するgemini-2.5-flash活用、一部にはGemma 3nを利用
 - **日本語特化**: Slackマークアップ除去と日本語URL周りの空白調整
 
 ```mermaid
@@ -23,7 +23,7 @@ sequenceDiagram
     participant User as 👤 ユーザー
     participant Slack as 📱 Slack
     participant CloudRun as ☁️ Cloud Run<br/>(Node.js Bot)
-    participant Gemini as 🧠 Gemini AI<br/>(gemini-2.5-flash)
+    participant Gemini as 🧠 Gemini AI<br/>(gemini-2.5-flash / Gemma 3n 4b)
 
     Note over User,Gemini: AIによる自動カレンダー連携
 
