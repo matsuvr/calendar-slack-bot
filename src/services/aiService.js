@@ -58,15 +58,23 @@ async function callGeminiWithRetry(params) {
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      // モデルによってThinking設定を調整
+      let config = { ...params.config };
+      
+      // Gemma-3nモデルではThinkingConfigを除去
+      if (params.model && params.model.includes('gemma')) {
+        // Gemma-3nの場合はThinkingConfigを追加しない
+      } else {
+        // Gemini-2.5-flashの場合はThinkingを無効化
+        config.thinkingConfig = {
+          thinkingBudget: 0
+        };
+      }
+
       const response = await ai.models.generateContent({
         model: params.model || config.gemini.models.summarize,
         contents: params.contents,
-        config: {
-          thinkingConfig: {
-            thinkingBudget: 0, // Thinkingを無効化
-          },
-          ...params.config
-        }
+        config: config
       });
 
       return response;
@@ -176,7 +184,13 @@ async function extractEventsFromText(text) {
 
     // よりシンプルなプロンプトに変更
     const prompt = `以下のテキストから予定やイベント情報を抽出し、JSON配列形式で返してください。
-予定が見つからない場合は空の配列[]を返してください。特に、日付と時間が重要なので、注意深く抽出してください。
+予定が見つからない場合は空の配列[]を返してください。
+
+重要な注意事項：
+- 日付と時間は必ず正確に抽出してください
+- 開始時間（startTime）と終了時間（endTime）は両方とも必須です
+- 終了時間が明記されていない場合は、開始時間の1時間後を設定してください
+- 時間は24時間形式（HH:MM）で指定してください
 
 現在の日時が ${currentDate} ${currentTime} であることを考慮してください。
 
@@ -200,11 +214,11 @@ JSON形式で返してください（コードブロックは使わず、純粋�
           },
           startTime: {
             type: "string",
-            description: "開始時間（HH:MM形式、24時間表記）"
+            description: "開始時間（HH:MM形式、24時間表記）。必ず指定してください。"
           },
           endTime: {
             type: "string",
-            description: "終了時間（HH:MM形式、24時間表記）"
+            description: "終了時間（HH:MM形式、24時間表記）。開始時間から適切な時間を推定してください。明示されていない場合は開始時間の1時間後を設定してください。"
           },
           location: {
             type: "string",
@@ -217,7 +231,7 @@ JSON形式で返してください（コードブロックは使わず、純粋�
             nullable: true
           }
         },
-        required: ["title"]
+        required: ["title", "date", "startTime", "endTime"]
       }
     };
 
@@ -273,7 +287,10 @@ JSON形式で返してください（コードブロックは使わず、純粋�
       throw new Error('APIレスポンスが配列形式ではありません');
     }
 
-    // 🚀 キャッシュに保存
+    // � 抽出されたイベントデータをログ出力
+    console.log('🔍 抽出されたイベントデータ:', JSON.stringify(parsedEvents, null, 2));
+
+    // �🚀 キャッシュに保存
     responseCache.set(cacheKey, { data: parsedEvents, timestamp: Date.now() });
 
     // 定期的なキャッシュクリーンアップ
@@ -373,7 +390,7 @@ ${text}
     console.log('🤖 Geminiタイトル生成API呼び出し開始');
 
     const response = await callGeminiWithRetry({
-      model: config.gemini.models.lite, // gemma 3を使用
+      model: config.gemini.models.lite, // Gemma-3nを使用
       contents: prompt,
       config: {
         generationConfig: {

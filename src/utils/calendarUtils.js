@@ -10,6 +10,8 @@ const { config } = require('../config/config');
  * @returns {string} - Googleカレンダー追加用のURL
  */
 function createGoogleCalendarUrl(event) {
+  console.log('📅 カレンダーURL生成開始:', JSON.stringify(event, null, 2));
+  
   const baseUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE';
   const params = new URLSearchParams();
   
@@ -56,8 +58,10 @@ function createGoogleCalendarUrl(event) {
     let startTime = '';
     if (event.startTime) {
       startTime = formatTime(event.startTime);
+      console.log(`📅 開始時間処理: ${event.startTime} -> ${startTime}`);
     } else {
       startTime = '000000';
+      console.log('📅 開始時間が未指定、デフォルト値を使用: 000000');
     }
     
     dates += `${startDate}T${startTime}`;
@@ -68,12 +72,15 @@ function createGoogleCalendarUrl(event) {
     let endTime = '';
     if (event.endTime) {
       endTime = formatTime(event.endTime);
+      console.log(`📅 終了時間処理: ${event.endTime} -> ${endTime}`);
     } else {
       // 終了時間が指定されていない場合は開始時間から1時間後をデフォルトとする
       endTime = calculateEndTime(startTime);
+      console.log(`📅 終了時間が未指定、計算値を使用: ${endTime}`);
     }
     
     dates += `${endDate}T${endTime}`;
+    console.log(`📅 最終日時文字列: ${dates}`);
     params.append('dates', dates);
   } else {
     // 日付が指定されていない場合は今日の12:00-13:00をデフォルトとする
@@ -181,17 +188,14 @@ function addSpacesAroundUrls(text) {
  * @returns {Object} - 標準化されたイベントデータ
  */
 function normalizeEventData(event) {
+  console.log('📅 イベントデータ正規化開始:', JSON.stringify(event, null, 2));
+  
   const normalizedEvent = { ...event };
   
-  // 時間形式の標準化 (HH:MM -> HH:MM:00)
-  if (normalizedEvent.startTime && !normalizedEvent.startTime.includes(':00')) {
-    normalizedEvent.startTime = normalizedEvent.startTime + ':00';
-  }
-
-  if (normalizedEvent.endTime && !normalizedEvent.endTime.includes(':00')) {
-    normalizedEvent.endTime = normalizedEvent.endTime + ':00';
-  }
+  // 時間形式の正規化は不要（formatTime関数で処理するため）
+  // Google Calendar URLにはHHMMSS形式が必要で、これはformatTime関数で変換される
   
+  console.log('📅 イベントデータ正規化完了:', JSON.stringify(normalizedEvent, null, 2));
   return normalizedEvent;
 }
 
