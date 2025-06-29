@@ -1,5 +1,5 @@
 /**
- * Gemini AIを使用したテキスト処理サービス
+ * Vertex AI (Gemini)を使用したテキスト処理サービス
  */
 
 const { GoogleGenAI } = require('@google/genai');
@@ -37,24 +37,71 @@ function cleanupAICache() {
   }
 }
 
-// Gemini APIクライアントの初期化（最新版に修正）
-let ai;
+// Vertex AI (Gemini) APIクライアントの初期化
+let vertexAI;
 try {
-  ai = new GoogleGenAI({ apiKey: config.gemini.apiKey });
-  console.log('✅ Gemini APIクライアント初期化成功');
+  vertexAI = new GoogleGenAI({
+    vertexai: true,
+    project: config.vertexai.projectId,
+    location: config.vertexai.location
+    // Cloud Run環境では、サービスアカウントによる自動認証が使用されるため、
+    // 明示的な認証設定は不要です
+  });
+  console.log('✅ Vertex AI (Gemini) APIクライアント初期化成功');
+  console.log(`📍 プロジェクト: ${config.vertexai.projectId}, リージョン: ${config.vertexai.location}`);
+  
+  // Cloud Run環境での認証情報をログ出力
+  if (process.env.K_SERVICE) {
+    console.log('🏃 Cloud Run環境で実行中 - サービスアカウントによる自動認証を使用');
+  }
 } catch (error) {
-  console.error('❌ Gemini APIの初期化に失敗しました:', error);
+  console.error('❌ Vertex AI (Gemini) APIの初期化に失敗しました:', error);
+  
+  // 認証エラーの場合、詳細な情報を提供
+  if (error.message.includes('authentication') || error.message.includes('credentials')) {
+    console.error('💡 Cloud Run環境では以下を確認してください:');
+    console.error('   1. サービスアカウントにVertex AI User権限が付与されている');
+    console.error('   2. プロジェクトでVertex AI APIが有効化されている');
+    console.error('   3. GOOGLE_CLOUD_PROJECT環境変数が正しく設定されている');
+  }
+  
+  throw error;
+}
+
+// Google AI Studio (Gemma 3n) APIクライアントの初期化
+let googleAI;
+try {
+  if (!config.googleai.apiKey) {
+    throw new Error('GEMINI_API_KEY環境変数が設定されていません');
+  }
+  
+  googleAI = new GoogleGenAI(config.googleai.apiKey);
+  console.log('✅ Google AI Studio (Gemma 3n) APIクライアント初期化成功');
+} catch (error) {
+  console.error('❌ Google AI Studio APIの初期化に失敗しました:', error);
+  
+  if (error.message.includes('GEMINI_API_KEY')) {
+    console.error('💡 Google AI Studio認証の確認事項:');
+    console.error('   1. GEMINI_API_KEY環境変数が設定されている');
+    console.error('   2. API Keyが有効で、Gemma 3nモデルにアクセス可能');
+  }
+  
   throw error;
 }
 
 /**
- * Gemini APIのリトライ機能付き呼び出し
+ * AIクライアントを選択してAPI呼び出しを行う関数
  * @param {Object} params - API呼び出しパラメータ
  * @returns {Promise<Object>} API応答
  */
-async function callGeminiWithRetry(params) {
+async function callAIWithRetry(params) {
   const maxRetries = 3;
   const baseDelay = 1000;
+
+  // モデルに応じてクライアントを選択
+  const isGemmaModel = params.model && params.model.includes('gemma');
+  const aiClient = isGemmaModel ? googleAI : vertexAI;
+  const clientName = isGemmaModel ? 'Google AI Studio (Gemma)' : 'Vertex AI (Gemini)';
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
@@ -62,7 +109,7 @@ async function callGeminiWithRetry(params) {
       let config = { ...params.config };
       
       // Gemma-3nモデルではThinkingConfigを除去
-      if (params.model && params.model.includes('gemma')) {
+      if (isGemmaModel) {
         // Gemma-3nの場合はThinkingConfigを追加しない
       } else {
         // Gemini-2.5-flashの場合はThinkingを無効化
@@ -71,15 +118,15 @@ async function callGeminiWithRetry(params) {
         };
       }
 
-      const response = await ai.models.generateContent({
-        model: params.model || config.gemini.models.summarize,
+      const response = await aiClient.models.generateContent({
+        model: params.model || config.vertexai.models.summarize,
         contents: params.contents,
         config: config
       });
 
       return response;
     } catch (error) {
-      console.error(`❌ Gemini API呼び出しエラー (試行 ${attempt + 1}/${maxRetries}):`, error.message);
+      console.error(`❌ ${clientName} API呼び出しエラー (試行 ${attempt + 1}/${maxRetries}):`, error.message);
 
       // 最後の試行の場合はエラーを投げる
       if (attempt === maxRetries - 1) {
@@ -115,8 +162,8 @@ async function summarizeText(text) {
     }
     const prompt = `以下のテキストを100文字以内で要約してください。ただし、Google Meet、Zoom、Teams、Webexなどの会議URL,ミーティングID、シークレットなどが含まれていた場合は、URL、ID、シークレットはそのまま残してください。この場合は100文字を超えてしまっても構いません:\n${text}`;
 
-    // 🚀 修正: 最新のGenAI API呼び出し方法
-    console.log('🤖 Gemini要約API呼び出し開始');
+    // 🚀 修正: 最新のVertex AI (GenAI) API呼び出し方法
+    console.log('🤖 Vertex AI (Gemini) 要約API呼び出し開始');
 
     // タイムアウト処理を改善
     let timeoutId;
@@ -124,8 +171,8 @@ async function summarizeText(text) {
       timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000);
     }); try {
       const response = await Promise.race([
-        callGeminiWithRetry({
-          model: config.gemini.models.summarize,
+        callAIWithRetry({
+          model: config.vertexai.models.summarize,
           contents: prompt,
           config: {
             generationConfig: {
@@ -140,7 +187,7 @@ async function summarizeText(text) {
 
       clearTimeout(timeoutId);
       const summary = response.text.trim();
-      console.log('✅ Gemini要約完了:', summary.substring(0, 50));
+      console.log('✅ Vertex AI (Gemini) 要約完了:', summary.substring(0, 50));
 
       // 🚀 キャッシュに保存
       responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
@@ -235,7 +282,7 @@ JSON形式で返してください（コードブロックは使わず、純粋�
       }
     };
 
-    console.log('🤖 Gemini予定抽出API呼び出し開始');
+    console.log('🤖 Vertex AI (Gemini) 予定抽出API呼び出し開始');
 
     // タイムアウト処理
     let timeoutId;
@@ -244,8 +291,8 @@ JSON形式で返してください（コードブロックは使わず、純粋�
     });
 
     const response = await Promise.race([
-      callGeminiWithRetry({
-        model: config.gemini.models.extract,
+      callAIWithRetry({
+        model: config.vertexai.models.extract,
         contents: prompt,
         config: {
           generationConfig: {
@@ -329,8 +376,8 @@ ${text}
 
 抽出された会議情報のみを返してください。見つからない場合は空文字を返してください。`;
 
-    const response = await callGeminiWithRetry({
-      model: config.gemini.models.summarize,
+    const response = await callAIWithRetry({
+      model: config.vertexai.models.summarize,
       contents: prompt,
       config: {
         generationConfig: {
@@ -387,10 +434,10 @@ ${text}
 
 生成されたタイトルのみを返してください：`;
 
-    console.log('🤖 Geminiタイトル生成API呼び出し開始');
+    console.log('🤖 Google AI Studio (Gemma 3n) タイトル生成API呼び出し開始');
 
-    const response = await callGeminiWithRetry({
-      model: config.gemini.models.lite, // Gemma-3nを使用
+    const response = await callAIWithRetry({
+      model: config.googleai.models.lite, // Gemma-3nをGoogle AI Studioで使用
       contents: prompt,
       config: {
         generationConfig: {

@@ -2,34 +2,35 @@
 
 **AI駆動のインテリジェントなSlackカレンダー連携システム**
 
-Slackメッセージにカレンダー絵文字でリアクションするだけで、AI（Gemini）が自動的に予定情報を抽出し、Google Calendarに追加可能なリンクを生成する次世代型ボットです。
+Slackメッセージにカレンダー絵文字でリアクションするだけで、Vertex AI（Gemini）が自動的に予定情報を抽出し、Google Calendarに追加可能なリンクを生成する次世代型ボットです。
 
-## 🚀 **技術的アイデアの核心**
-
-### **シンプルかつ革新的な処理フロー**
+## � **技術的アイデアの核心*    subgraph "AI Processing Layer"
+        C --> D[🧠 Vertex AI (Gemini-2.5-flash)<br/>予定情報抽出]
+        D --> E[📊 JSON構造化データ]
+        E --> F[🤖 Google AI Studio (Gemma-3n)<br/>タイトル生成]
+    end### **シンプルかつ革新的な処理フロー**
 1. **絵文字トリガー**: Slackでカレンダー📅絵文字をリアクション
-2. **AI解析**: Gemini APIが日時・場所・概要を自動抽出
+2. **Vertex AI解析**: Gemini APIが日時・場所・概要を自動抽出
 3. **URL生成**: 抽出データをURLエンコードしてGoogle Calendar リンク作成
 4. **即座の返信**: 元投稿にスレッドでカレンダーリンクを提供
 
 ### **技術的な独自性**
+- **Vertex AI統合**: Google Cloud ネイティブなAI処理による高速・安定動作
+- **ハイブリッドAI戦略**: Vertex AI（Gemini）とGoogle AI Studio（Gemma 3n）の最適使い分け
 - **ゼロAPI依存**: Google Calendar APIを使わず、URLエンコードによるカレンダー連携
 - **完全メモリ内処理**: Firestoreなしの高速キャッシュシステムとTTL管理
-- **ハイブリッドAI戦略**: gemini-2.5-flashとgemma-3n-e4b-itの最適使い分け
 - **日本語特化**: Slackマークアップ除去と日本語URL周りの空白調整
 - **サーバーレス完全対応**: Cloud Run上での完全ステートレス設計
-
-https://youtu.be/cAIFGSNcwrU
 
 ```mermaid
 sequenceDiagram
     participant User as 👤 ユーザー
     participant Slack as 📱 Slack
     participant CloudRun as ☁️ Cloud Run<br/>(Node.js Bot)
-    participant Gemini as 🧠 Gemini AI<br/>(gemini-2.5-flash)
-    participant Gemma as 🤖 Gemma AI<br/>(gemma-3n-e4b-it)
+    participant VertexAI as 🧠 Vertex AI<br/>(gemini-2.5-flash)
+    participant GoogleAI as 🤖 Google AI Studio<br/>(gemma-3n-e4b-it)
 
-    Note over User,Gemma: ハイブリッドAIによる自動カレンダー連携
+    Note over User,GoogleAI: ハイブリッドAIによる自動カレンダー連携
 
     User->>Slack: 📅 カレンダー絵文字リアクション
     Slack->>CloudRun: reaction_added イベント通知
@@ -39,13 +40,13 @@ sequenceDiagram
     
     CloudRun->>CloudRun: メモリ内重複チェック<br/>(TTLキャッシュ)
     
-    CloudRun->>Gemini: 予定情報の抽出依頼
-    Note right of Gemini: 日時・場所・概要を構造化データとして解析<br/>Thinking機能無効化で高速化
-    Gemini-->>CloudRun: 構造化された予定データ(JSON)
+    CloudRun->>VertexAI: 予定情報の抽出依頼
+    Note right of VertexAI: 日時・場所・概要を構造化データとして解析<br/>Google Cloud統合で高速・安定処理
+    VertexAI-->>CloudRun: 構造化された予定データ(JSON)
     
-    CloudRun->>Gemma: AIタイトル生成依頼
-    Note right of Gemma: 軽量モデルで簡潔なタイトル生成<br/>コスト最適化
-    Gemma-->>CloudRun: 生成されたイベントタイトル
+    CloudRun->>GoogleAI: AIタイトル生成依頼
+    Note right of GoogleAI: 軽量モデルで簡潔なタイトル生成<br/>サーバーレス対応
+    GoogleAI-->>CloudRun: 生成されたイベントタイトル
     
     CloudRun->>CloudRun: URLエンコードでカレンダーリンク生成
     Note right of CloudRun: Google Calendar APIは使用せず<br/>URL構築のみで実現
@@ -54,6 +55,15 @@ sequenceDiagram
     Slack-->>User: ワンクリックでカレンダー追加可能
     
     Note over CloudRun: 完全メモリ内処理・サーバーレス運用
+```
+    
+    CloudRun->>CloudRun: URLエンコードでカレンダーリンク生成
+    Note right of CloudRun: Google Calendar APIは使用せず<br/>URL構築のみで実現
+    
+    CloudRun->>Slack: カレンダーリンクをスレッドに返信
+    Slack-->>User: ワンクリックでカレンダー追加可能
+    
+    Note over CloudRun: Vertex AI統合・完全メモリ内処理・サーバーレス運用
 ```
 
 ## 🎯 **実装における技術的工夫**
@@ -64,7 +74,8 @@ sequenceDiagram
 - **AIレスポンスキャッシュ**: 30分TTL、最大500エントリのLRU自動削除
 - **自動メモリ管理**: TTL期限切れとサイズ制限による効率的削除
 
-### **2. ハイブリッドAI処理最適化**
+### **2. Vertex AI ハイブリッド処理最適化**
+- **Vertex AI統合**: Google Cloud ネイティブなAI処理基盤
 - **Gemini-2.5-flash**: 予定抽出・要約処理用（Thinking機能無効化で高速化）
 - **Gemma-3n-e4b-it**: タイトル生成用軽量モデル（コスト最適化）
 - **指数バックオフリトライ**: 最大3回の堅牢なAPI呼び出し
@@ -97,17 +108,17 @@ C4Context
     }
     
     System_Ext(slack, "Slack", "イベント通知・メッセージ管理")
-    System_Ext(gemini, "Google Gemini AI", "自然言語処理API")
+    System_Ext(vertexai, "Google Vertex AI", "統合AI処理API")
     System_Ext(google_cal, "Google Calendar", "カレンダーサービス")
     
     Rel(user, slack, "📅 絵文字リアクション")
     Rel(slack, calendar_bot, "Webhook通知", "HTTPS")
     Rel(calendar_bot, slack, "返信投稿", "API")
-    Rel(calendar_bot, gemini, "テキスト解析", "REST API")
+    Rel(calendar_bot, vertexai, "AI処理", "REST API")
     Rel(calendar_bot, google_cal, "URL生成", "URLエンコード")
     
     UpdateElementStyle(calendar_bot, $bgColor="#e1f5fe")
-    UpdateElementStyle(gemini, $bgColor="#f3e5f5")
+    UpdateElementStyle(vertexai, $bgColor="#f3e5f5")
     UpdateElementStyle(slack, $bgColor="#e8f5e8")
     UpdateElementStyle(google_cal, $bgColor="#fff3e0")
 ```
@@ -119,13 +130,13 @@ C4Container
     title Calendar Slack Bot - 内部アーキテクチャ
 
     System_Ext(slack_api, "Slack API", "イベント・メッセージAPI")
-    System_Ext(gemini_api, "Google Gemini API", "AI処理API")
+    System_Ext(vertexai_api, "Google Vertex AI", "統合AI処理API")
 
     Container_Boundary(bot_app, "Calendar Slack Bot Application") {
         Container(web_server, "Web Server", "Express.js", "HTTPエンドポイント管理")
         Container(slack_bolt, "Slack Bolt App", "@slack/bolt", "Slackイベント処理")
         Container(event_handler, "Event Handler", "Node.js", "リアクション処理ロジック")
-        Container(ai_service, "AI Service", "@google/genai", "Gemini API連携")
+        Container(ai_service, "AI Service", "@google/genai", "Vertex AI連携")
         Container(calendar_service, "Calendar Service", "Node.js", "URLエンコードによるリンク生成")
         ContainerDb(memory_cache, "Memory Cache", "Map + TTL", "高速キャッシュシステム")
     }
@@ -136,7 +147,7 @@ C4Container
     Rel(event_handler, ai_service, "テキスト解析依頼", "関数呼び出し")
     Rel(event_handler, calendar_service, "URL生成依頼", "関数呼び出し")
     Rel(event_handler, memory_cache, "キャッシュ操作", "Read/Write")
-    Rel(ai_service, gemini_api, "AI処理", "HTTPS API")
+    Rel(ai_service, vertexai_api, "AI処理", "HTTPS API")
     Rel(ai_service, memory_cache, "レスポンスキャッシュ", "Read/Write")
     Rel(event_handler, slack_api, "返信送信", "HTTPS API")
 ```
@@ -147,7 +158,7 @@ C4Container
 
 ```mermaid
 flowchart TD
-    A[完全メモリ内処理による高速化] --> B[TTL自動管理]
+    A[Vertex AI統合による高速化] --> B[TTL自動管理]
     A --> C[ハイブリッドAI最適化]
     A --> D[ステートレス設計]
     
@@ -155,7 +166,7 @@ flowchart TD
     B --> B2[30分AIキャッシュ<br/>レスポンス再利用]
     B --> B3[LRU自動削除<br/>メモリ効率化]
     
-    C --> C1[Gemini: 予定抽出<br/>高精度・Thinking無効]
+    C --> C1[Vertex AI: 予定抽出<br/>高精度・統合処理]
     C --> C2[Gemma: タイトル生成<br/>軽量・コスト最適化]
     C --> C3[指数バックオフ<br/>堅牢なリトライ機構]
     
@@ -252,7 +263,7 @@ flowchart TB
 ```
 入力: "明日14時からZoomで開発チーム定例会議です"
 
-🧠 Gemini-2.5-flash (予定抽出):
+🧠 Vertex AI (Gemini-2.5-flash) - 予定抽出:
 {
   "startTime": "14:00",
   "endTime": "15:00",
@@ -267,20 +278,58 @@ flowchart TB
 🔗 結果: ワンクリックでカレンダー追加可能なリンク生成
 ```
 
+## � **Cloud Run認証設定**
+
+### **Vertex AI認証の仕組み**
+Cloud Runでは`gcloud auth application-default login`は不要です。代わりに以下の自動認証が動作します：
+
+1. **サービスアカウント自動アタッチ**: Cloud Runインスタンスにサービスアカウントが自動的に関連付け
+2. **ADC（Application Default Credentials）**: アプリケーションが自動的に認証情報を取得
+3. **メタデータサーバー**: Cloud Run内部でOAuth 2.0トークンを自動取得
+
+### **必要な権限設定**
+```bash
+# Vertex AI User権限（予定抽出・要約用）
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:YOUR_SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/aiplatform.user"
+
+# Cloud Run Invoker権限（必要に応じて）
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:YOUR_SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/run.invoker"
+```
+
+### **認証トラブルシューティング**
+
+#### **Vertex AI API認証エラーの場合**
+1. サービスアカウントに`roles/aiplatform.user`権限が付与されているか確認
+2. プロジェクトでVertex AI APIが有効化されているか確認
+3. `GOOGLE_CLOUD_PROJECT`環境変数が正しく設定されているか確認
+
+#### **Google AI Studio API認証エラーの場合**
+1. `GEMINI_API_KEY`環境変数が正しく設定されているか確認
+2. API KeyがGemma 3nモデルにアクセス可能か確認
+3. Google AI Studioでの利用制限に達していないか確認
+
 ## 🔧 **セットアップと使用方法**
 
 ### **前提条件**
 - Node.js v20以上
 - Slack APIアカウント
-- Google AI Studio（Gemini API）アクセス権
-- Google Cloud Platform（デプロイ時）
+- Google Cloud Platform（Vertex AI有効化）
+- Google AI Studio（Gemma 3n用APIキー）
+- Cloud Run（デプロイ時）
 
 ### **環境変数設定**
 ```env
 SLACK_BOT_TOKEN=xoxb-your-bot-token
 SLACK_SIGNING_SECRET=your-signing-secret
+GOOGLE_CLOUD_PROJECT=your-project-id
+VERTEX_AI_LOCATION=global
 GEMINI_API_KEY=your-gemini-api-key
 SLACK_TEAM_ID=your-team-id
+GEMINI_LITE_MODEL=gemma-3n-e4b-it
 ```
 
 ### **ローカル開発**
@@ -300,11 +349,23 @@ npm test
 # Dockerイメージビルド
 gcloud builds submit --tag gcr.io/PROJECT_ID/calendar-slack-bot
 
-# Cloud Runデプロイ
+# サービスアカウント作成（Vertex AI用）
+gcloud iam service-accounts create calendar-slack-bot-sa \
+  --description="Calendar Slack Bot Service Account" \
+  --display-name="Calendar Slack Bot"
+
+# Vertex AI User権限を付与
+gcloud projects add-iam-policy-binding PROJECT_ID \
+  --member="serviceAccount:calendar-slack-bot-sa@PROJECT_ID.iam.gserviceaccount.com" \
+  --role="roles/aiplatform.user"
+
+# Cloud Runデプロイ（サービスアカウント指定）
 gcloud run deploy calendar-slack-bot \
   --image gcr.io/PROJECT_ID/calendar-slack-bot \
   --platform managed \
   --region us-central1 \
+  --service-account calendar-slack-bot-sa@PROJECT_ID.iam.gserviceaccount.com \
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=PROJECT_ID,VERTEX_AI_LOCATION=global,GEMINI_API_KEY=your-gemini-api-key,SLACK_BOT_TOKEN=xoxb-your-token,SLACK_SIGNING_SECRET=your-secret" \
   --allow-unauthenticated
 ```
 
@@ -340,14 +401,16 @@ gcloud run deploy calendar-slack-bot \
 
 ### **AI処理の技術的詳細**
 
-#### **Gemini-2.5-flash（予定抽出エンジン）**
+#### **Vertex AI Gemini-2.5-flash（予定抽出エンジン）**
 - **用途**: 自然言語からの構造化データ抽出
+- **統合**: Google Cloud Vertex AI による安定したサービス提供
 - **最適化**: Thinking機能無効化による高速化
 - **出力**: JSON Schema準拠の構造化データ
 - **精度**: 日本語自然言語処理に特化
 
-#### **Gemma-3n-e4b-it（タイトル生成エンジン）**
+#### **Google AI Studio Gemma-3n-e4b-it（タイトル生成エンジン）**
 - **用途**: 簡潔で分かりやすいイベントタイトル生成
+- **統合**: Google AI Studio APIによるサーバーレス対応
 - **最適化**: 軽量モデルによるコスト効率化
 - **出力**: 20文字以内の簡潔なタイトル
 - **特徴**: 日本語ビジネス用語に最適化
