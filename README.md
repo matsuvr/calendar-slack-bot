@@ -52,14 +52,6 @@ sequenceDiagram
     CloudRun->>Slack: カレンダーリンクをスレッドに返信
     Slack-->>User: ワンクリックでカレンダー追加可能
     
-    Note over CloudRun: 完全メモリ内処理・サーバーレス運用
-    
-    CloudRun->>CloudRun: URLエンコードでカレンダーリンク生成
-    Note right of CloudRun: Google Calendar APIは使用せず<br/>URL構築のみで実現
-    
-    CloudRun->>Slack: カレンダーリンクをスレッドに返信
-    Slack-->>User: ワンクリックでカレンダー追加可能
-    
     Note over CloudRun: Vertex AI統合・完全メモリ内処理・サーバーレス運用
 ```
 
