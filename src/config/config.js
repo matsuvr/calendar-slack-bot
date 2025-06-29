@@ -16,6 +16,7 @@ const config = {
     botToken: process.env.SLACK_BOT_TOKEN,
     signingSecret: process.env.SLACK_SIGNING_SECRET,
     teamId: process.env.SLACK_TEAM_ID || '',
+    workspaceName: process.env.SLACK_WORKSPACE_NAME || 'calendar-agent-test', // デフォルトワークスペース名
     processBeforeResponse: false, // イベントでは自動応答のためfalse
   },
   

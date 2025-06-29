@@ -118,10 +118,11 @@ async function handleCalendarReaction({ event, client }) {
     // 🚀 URL前後に全角文字がある場合、半角スペースを追加
     cleanedText = addSpacesAroundUrls(cleanedText);
     
-    const teamId = config.slack.teamId || 'app';
-    const messageUrl = `https://${teamId}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
+    const workspaceName = config.slack.workspaceName;
+    const messageUrl = `https://${workspaceName}.slack.com/archives/${event.item.channel}/p${event.item.ts.replace('.', '')}`;
 
     console.log('🚀 AI処理開始: メッセージ長', cleanedText.length, '文字');
+    console.log('📎 Slack投稿URL:', messageUrl);
 
     // 🚀 AI処理を非同期で開始（結果を待たない）
     processAIAndRespond({
