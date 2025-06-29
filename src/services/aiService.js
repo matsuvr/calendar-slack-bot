@@ -98,19 +98,27 @@ try {
 async function callAIWithRetry(params) {
   const maxRetries = 3;
   const baseDelay = 1000;
+  const totalTimeout = 25000; // 全体で25秒のタイムアウト
 
   // モデルに応じてクライアントを選択
   const isGemmaModel = params.model && params.model.includes('gemma');
   const aiClient = isGemmaModel ? googleAI : vertexAI;
   const clientName = isGemmaModel ? 'Google AI Studio (Gemma)' : 'Vertex AI (Gemini)';
 
+  const startTime = Date.now();
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      // 全体タイムアウトチェック
+      if (Date.now() - startTime > totalTimeout) {
+        throw new Error(`API呼び出し全体タイムアウト (${totalTimeout}ms 経過)`);
+      }
+
       let response;
       
       if (isGemmaModel) {
         // Google AI Studio用のAPI呼び出し
-        response = await aiClient.models.generateContent({
+        const apiCall = aiClient.models.generateContent({
           model: params.model,
           contents: [
             {
@@ -120,9 +128,16 @@ async function callAIWithRetry(params) {
           ],
           config: params.config?.generationConfig || {}
         });
+        
+        // 個別タイムアウト（10秒）
+        const timeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('API呼び出しタイムアウト (10秒)')), 10000)
+        );
+        
+        response = await Promise.race([apiCall, timeout]);
       } else {
         // Vertex AI用のAPI呼び出し
-        response = await aiClient.models.generateContent({
+        const apiCall = aiClient.models.generateContent({
           model: params.model,
           contents: [
             {
@@ -131,12 +146,24 @@ async function callAIWithRetry(params) {
             }
           ],
           config: {
-            ...params.config?.generationConfig || {},
+            ...(params.config?.generationConfig || {}),
+            // structured output設定を含める
+            ...(params.config?.generationConfig?.responseMimeType && {
+              responseMimeType: params.config.generationConfig.responseMimeType,
+              responseSchema: params.config.generationConfig.responseSchema
+            }),
             thinkingConfig: {
               thinkingBudget: 0  // Thinkingモードを無効化
             }
           }
         });
+        
+        // 個別タイムアウト（10秒）
+        const timeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('API呼び出しタイムアウト (10秒)')), 10000)
+        );
+        
+        response = await Promise.race([apiCall, timeout]);
       }
       
       // レスポンス形式を統一
@@ -197,18 +224,19 @@ async function summarizeText(text) {
     // タイムアウト処理を改善
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000);
+      timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (20秒)')), 20000); // 8秒から20秒に延長
     });
 
     const response = await Promise.race([
       callAIWithRetry({
         model: config.vertexai.models.summarize,
         contents: prompt,
-        config: {        generationConfig: {
-          temperature: 0.2,
-          topP: 0.8,
-          maxOutputTokens: 500  // 100から500に増加
-        }
+        config: {
+          generationConfig: {
+            temperature: 0.2,
+            topP: 0.8,
+            maxOutputTokens: 500  // 100から500に増加
+          }
         }
       }),
       timeoutPromise
@@ -309,26 +337,23 @@ ${text}`;
     // タイムアウト処理
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000);
+      timeoutId = setTimeout(() => reject(new Error('AI予定抽出タイムアウト (30秒)')), 30000); // 15秒から30秒に延長
     });
 
-    // 最新のVertex AI APIを使用（test-vertex-ai.jsと同じパターン）
+    // 最新のVertex AI APIを使用（callAIWithRetryパターンに統一）
     const response = await Promise.race([
-      vertexAI.models.generateContent({
+      callAIWithRetry({
         model: config.vertexai.models.extract,
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: prompt }]
-          }
-        ],
+        contents: prompt,
         config: {
-          temperature: 0.0,
-          maxOutputTokens: 8192,
-          responseMimeType: 'application/json',
-          responseSchema: responseSchema,
-          thinkingConfig: {
-            thinkingBudget: 0  // Thinkingモードを無効化
+          generationConfig: {
+            temperature: 0.0,
+            maxOutputTokens: 8192,
+            responseMimeType: 'application/json',
+            responseSchema: responseSchema,
+            thinkingConfig: {
+              thinkingBudget: 0  // Thinkingモードを無効化
+            }
           }
         }
       }),
