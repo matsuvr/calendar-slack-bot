@@ -5,11 +5,7 @@
 Slackメッセージにカレンダー絵文字でリアクションするだけで、Vertex AI（Gemini）が自動的に予定情報を抽出し、Google Calendarに追加可能なリンクを生成する次世代型ボットです。
 
 ##  **技術的アイデアの核心*
-    subgraph "AI Processing Layer"
-        C --> D[🧠 Vertex AI (Gemini-2.5-flash)<br/>予定情報抽出]
-        D --> E[📊 JSON構造化データ]
-        E --> F[🤖 Google AI Studio (Gemma-3n)<br/>タイトル生成]
-    end
+
 ### **シンプルかつ革新的な処理フロー**
 1. **絵文字トリガー**: Slackでカレンダー📅絵文字をリアクション
 2. **Vertex AI解析**: Gemini APIが日時・場所・概要を自動抽出
