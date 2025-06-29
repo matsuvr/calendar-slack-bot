@@ -1,5 +1,6 @@
 /**
  * Vertex AI (Gemini)を使用したテキスト処理サービス
+ * 最新の@google/genai SDKを使用してStructured Outputをサポート
  */
 
 const { GoogleGenAI } = require('@google/genai');
@@ -47,7 +48,7 @@ try {
     // Cloud Run環境では、サービスアカウントによる自動認証が使用されるため、
     // 明示的な認証設定は不要です
   });
-  console.log('✅ Vertex AI (Gemini) APIクライアント初期化成功');
+  console.log('✅ Vertex AI (Gemini) 最新APIクライアント初期化成功');
   console.log(`📍 プロジェクト: ${config.vertexai.projectId}, リージョン: ${config.vertexai.location}`);
   
   // Cloud Run環境での認証情報をログ出力
@@ -105,26 +106,53 @@ async function callAIWithRetry(params) {
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // モデルによってThinking設定を調整
-      let config = { ...params.config };
+      let response;
       
-      // Gemma-3nモデルではThinkingConfigを除去
       if (isGemmaModel) {
-        // Gemma-3nの場合はThinkingConfigを追加しない
+        // Google AI Studio用のAPI呼び出し
+        response = await aiClient.models.generateContent({
+          model: params.model,
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: params.contents }]
+            }
+          ],
+          config: params.config?.generationConfig || {}
+        });
       } else {
-        // Gemini-2.5-flashの場合はThinkingを無効化
-        config.thinkingConfig = {
-          thinkingBudget: 0
-        };
+        // Vertex AI用のAPI呼び出し
+        response = await aiClient.models.generateContent({
+          model: params.model,
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: params.contents }]
+            }
+          ],
+          config: {
+            ...params.config?.generationConfig || {},
+            thinkingConfig: {
+              thinkingBudget: 0  // Thinkingモードを無効化
+            }
+          }
+        });
       }
-
-      const response = await aiClient.models.generateContent({
-        model: params.model || config.vertexai.models.summarize,
-        contents: params.contents,
-        config: config
-      });
-
-      return response;
+      
+      // レスポンス形式を統一
+      let responseText = '';
+      if (response.text) {
+        responseText = response.text;
+      } else if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          responseText = candidate.content.parts[0].text || '';
+        }
+      }
+      
+      return {
+        text: responseText
+      };
     } catch (error) {
       console.error(`❌ ${clientName} API呼び出しエラー (試行 ${attempt + 1}/${maxRetries}):`, error.message);
 
@@ -160,6 +188,7 @@ async function summarizeText(text) {
       console.log(`⚡ 要約キャッシュヒット (${Date.now() - startTime}ms)`);
       return cached.data;
     }
+    
     const prompt = `以下のテキストを100文字以内で要約してください。ただし、Google Meet、Zoom、Teams、Webexなどの会議URL,ミーティングID、シークレットなどが含まれていた場合は、URL、ID、シークレットはそのまま残してください。この場合は100文字を超えてしまっても構いません:\n${text}`;
 
     // 🚀 修正: 最新のVertex AI (GenAI) API呼び出し方法
@@ -169,35 +198,32 @@ async function summarizeText(text) {
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => reject(new Error('AI要約処理タイムアウト (8秒)')), 8000);
-    }); try {
-      const response = await Promise.race([
-        callAIWithRetry({
-          model: config.vertexai.models.summarize,
-          contents: prompt,
-          config: {
-            generationConfig: {
-              temperature: 0.2,
-              topP: 0.8,
-              maxOutputTokens: 100
-            }
-          }
-        }),
-        timeoutPromise
-      ]);
+    });
 
-      clearTimeout(timeoutId);
-      const summary = response.text.trim();
-      console.log('✅ Vertex AI (Gemini) 要約完了:', summary.substring(0, 50));
+    const response = await Promise.race([
+      callAIWithRetry({
+        model: config.vertexai.models.summarize,
+        contents: prompt,
+        config: {        generationConfig: {
+          temperature: 0.2,
+          topP: 0.8,
+          maxOutputTokens: 500  // 100から500に増加
+        }
+        }
+      }),
+      timeoutPromise
+    ]);
 
-      // 🚀 キャッシュに保存
-      responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
+    clearTimeout(timeoutId);
+    const summary = response.text.trim();
+    console.log('✅ Vertex AI (Gemini) 要約完了:', summary.substring(0, 50));
 
-      console.log(`⏱️ AI要約完了: ${Date.now() - startTime}ms`);
-      return summary;
-    } catch (innerError) {
-      clearTimeout(timeoutId);
-      throw innerError;
-    }
+    // 🚀 キャッシュに保存
+    responseCache.set(cacheKey, { data: summary, timestamp: Date.now() });
+
+    console.log(`⏱️ AI要約完了: ${Date.now() - startTime}ms`);
+    return summary;
+
   } catch (error) {
     console.error(`❌ 要約エラー (${Date.now() - startTime}ms):`, error.message);
     return text.substring(0, 97) + '...';
@@ -205,7 +231,7 @@ async function summarizeText(text) {
 }
 
 /**
- * テキストから予定情報を抽出する関数
+ * テキストから予定情報を抽出する関数（Structured Output使用）
  * @param {string} text - 分析するテキスト
  * @returns {Promise<Array>} - 抽出された予定情報の配列
  */
@@ -229,9 +255,8 @@ async function extractEventsFromText(text) {
       return cached.data;
     }
 
-    // よりシンプルなプロンプトに変更
-    const prompt = `以下のテキストから予定やイベント情報を抽出し、JSON配列形式で返してください。
-予定が見つからない場合は空の配列[]を返してください。
+    const prompt = `以下のテキストから予定やイベント情報を抽出してください。
+予定が見つからない場合は空の配列を返してください。
 
 重要な注意事項：
 - 日付と時間は必ず正確に抽出してください
@@ -239,50 +264,47 @@ async function extractEventsFromText(text) {
 - 終了時間が明記されていない場合は、開始時間の1時間後を設定してください
 - 時間は24時間形式（HH:MM）で指定してください
 
-現在の日時が ${currentDate} ${currentTime} であることを考慮してください。
+現在の日時: ${currentDate} ${currentTime}
 
 テキスト:
-${text}
-
-JSON形式で返してください（コードブロックは使わず、純粋なJSONのみ）:`;
-
-    const responseSchema = {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          title: {
-            type: "string",
-            description: "予定やイベントのタイトル"
-          },
-          date: {
-            type: "string",
-            description: "予定の日付（YYYY-MM-DD形式）"
-          },
-          startTime: {
-            type: "string",
-            description: "開始時間（HH:MM形式、24時間表記）。必ず指定してください。"
-          },
-          endTime: {
-            type: "string",
-            description: "終了時間（HH:MM形式、24時間表記）。開始時間から適切な時間を推定してください。明示されていない場合は開始時間の1時間後を設定してください。"
-          },
-          location: {
-            type: "string",
-            description: "予定の物理的な場所（会議室、ビル名など）。URLは含めないでください。",
-            nullable: true
-          },
-          description: {
-            type: "string",
-            description: "予定の詳細な説明。オンラインミーティングのURLや追加情報を含む。",
-            nullable: true
-          }
-        },
-        required: ["title", "date", "startTime", "endTime"]
-      }
-    };
+${text}`;
 
     console.log('🤖 Vertex AI (Gemini) 予定抽出API呼び出し開始');
+
+    // 構造化出力用のスキーマ定義（test-vertex-ai.jsと同じパターン）
+    const responseSchema = {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: '予定やイベントのタイトル'
+          },
+          date: {
+            type: 'string',
+            description: '予定の日付（YYYY-MM-DD形式）'
+          },
+          startTime: {
+            type: 'string',
+            description: '開始時間（HH:MM形式、24時間表記）'
+          },
+          endTime: {
+            type: 'string',
+            description: '終了時間（HH:MM形式、24時間表記）'
+          },
+          location: {
+            type: 'string',
+            description: '予定の物理的な場所（会議室、ビル名など）'
+          },
+          description: {
+            type: 'string',
+            description: '予定の詳細な説明。オンラインミーティングのURLや追加情報を含む'
+          }
+        },
+        required: ['title', 'date', 'startTime', 'endTime']
+      }
+    };
 
     // タイムアウト処理
     let timeoutId;
@@ -290,16 +312,23 @@ JSON形式で返してください（コードブロックは使わず、純粋�
       timeoutId = setTimeout(() => reject(new Error('AI予定抽出タイムアウト (15秒)')), 15000);
     });
 
+    // 最新のVertex AI APIを使用（test-vertex-ai.jsと同じパターン）
     const response = await Promise.race([
-      callAIWithRetry({
+      vertexAI.models.generateContent({
         model: config.vertexai.models.extract,
-        contents: prompt,
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }]
+          }
+        ],
         config: {
-          generationConfig: {
-            temperature: 0.1,
-            topP: 0.9,
-            responseMimeType: "application/json",
-            responseSchema: responseSchema
+          temperature: 0.0,
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json',
+          responseSchema: responseSchema,
+          thinkingConfig: {
+            thinkingBudget: 0  // Thinkingモードを無効化
           }
         }
       }),
@@ -308,8 +337,8 @@ JSON形式で返してください（コードブロックは使わず、純粋�
 
     clearTimeout(timeoutId);
 
-    // レスポンステキストの前処理（Markdown形式のJSONをクリーンアップ）
-    let responseText = response.text.trim();
+    // レスポンステキストの前処理（test-vertex-ai.jsと同じパターン）
+    let responseText = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
 
     // ```json...``` のMarkdown形式を除去
     if (responseText.startsWith('```json') && responseText.endsWith('```')) {
@@ -334,10 +363,10 @@ JSON形式で返してください（コードブロックは使わず、純粋�
       throw new Error('APIレスポンスが配列形式ではありません');
     }
 
-    // � 抽出されたイベントデータをログ出力
+    // 抽出されたイベントデータをログ出力
     console.log('🔍 抽出されたイベントデータ:', JSON.stringify(parsedEvents, null, 2));
 
-    // �🚀 キャッシュに保存
+    // 🚀 キャッシュに保存
     responseCache.set(cacheKey, { data: parsedEvents, timestamp: Date.now() });
 
     // 定期的なキャッシュクリーンアップ
@@ -434,10 +463,10 @@ ${text}
 
 生成されたタイトルのみを返してください：`;
 
-    console.log('🤖 Google AI Studio (Gemma 3n) タイトル生成API呼び出し開始');
+    console.log('🤖 Vertex AI (Gemini) タイトル生成API呼び出し開始');
 
     const response = await callAIWithRetry({
-      model: config.googleai.models.lite, // Gemma-3nをGoogle AI Studioで使用
+      model: config.vertexai.models.summarize, // Vertex AI (Gemini)を使用
       contents: prompt,
       config: {
         generationConfig: {

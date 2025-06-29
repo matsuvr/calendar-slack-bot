@@ -22,7 +22,7 @@ const config = {
   // Vertex AI設定
   vertexai: {
     projectId: process.env.GOOGLE_CLOUD_PROJECT,
-    location: process.env.VERTEX_AI_LOCATION || 'global',
+    location: process.env.VERTEX_AI_LOCATION || 'us-central1', // テストで成功したロケーション
     models: {
       summarize: 'gemini-2.5-flash',
       extract: 'gemini-2.5-flash',
@@ -64,7 +64,10 @@ const config = {
 const validateConfig = () => {
   try {
     const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'GOOGLE_CLOUD_PROJECT', 'GEMINI_API_KEY'];
+    const optionalEnvVars = ['SLACK_TEAM_ID']; // オプショナル環境変数
+    
     const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+    const missingOptionalVars = optionalEnvVars.filter(envVar => !process.env[envVar]);
     
     if (missingEnvVars.length > 0) {
       console.warn(`警告: 以下の環境変数が設定されていません: ${missingEnvVars.join(', ')}`);
@@ -80,6 +83,12 @@ const validateConfig = () => {
       }
     } else {
       console.log('✅ 全ての必須環境変数が設定されています');
+      
+      // オプショナル環境変数の確認
+      if (missingOptionalVars.length > 0) {
+        console.log(`ℹ️  オプショナル環境変数（未設定）: ${missingOptionalVars.join(', ')}`);
+        console.log('   単一ワークスペースでの使用では設定不要です');
+      }
       
       // Cloud Run環境の検出とログ出力
       if (process.env.K_SERVICE) {
